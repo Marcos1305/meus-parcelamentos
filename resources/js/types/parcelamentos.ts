@@ -29,6 +29,19 @@ export type CardOption = {
     due_day: number;
 };
 
+export type MonthlyProjectionRow = {
+    month: string;
+    total_cents: number;
+};
+
+export type DashboardSummary = {
+    cards_count: number;
+    open_installments_count: number;
+    total_due_cents: number;
+    next_due_date: string | null;
+    next_due_cents: number;
+};
+
 export type CardFormValues = {
     id?: number;
     name: string;
