@@ -7,9 +7,9 @@ const LABELS = {
 } as const;
 
 const CLASSES = {
-    paid: 'bg-secondary/15 text-secondary-foreground border-secondary/30',
-    upcoming: 'bg-accent/15 text-accent-foreground border-accent/30',
-    pending: 'bg-muted text-muted-foreground border-border',
+    paid: 'bg-secondary/10 text-secondary border-transparent',
+    upcoming: 'bg-primary/20 text-status-upcoming border-transparent',
+    pending: 'bg-destructive/10 text-destructive border-transparent',
 } as const;
 
 export function StatusChip({ status }: { status: keyof typeof LABELS }) {
