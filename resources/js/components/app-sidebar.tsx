@@ -1,9 +1,16 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, CreditCard, FolderGit2, LayoutGrid } from 'lucide-react';
+import {
+    BookOpen,
+    CreditCard,
+    FolderGit2,
+    LayoutGrid,
+    Plus,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
+import { Button } from '@/components/ui/button';
 import {
     Sidebar,
     SidebarContent,
@@ -15,6 +22,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import cards from '@/routes/cards';
+import purchases from '@/routes/purchases';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -60,6 +68,14 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+
+                <div className="px-2 pt-2">
+                    <Button asChild className="w-full">
+                        <Link href={purchases.create()}>
+                            <Plus /> Novo Lançamento
+                        </Link>
+                    </Button>
+                </div>
             </SidebarContent>
 
             <SidebarFooter>
