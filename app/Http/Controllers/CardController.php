@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\BuildCardsOverview;
 use App\Enums\CardBrand;
 use App\Http\Requests\StoreCardRequest;
 use App\Http\Requests\UpdateCardRequest;
@@ -13,25 +14,10 @@ use Inertia\Response;
 
 class CardController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, BuildCardsOverview $buildCardsOverview): Response
     {
-        $cards = $request->user()->cards()
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Card $card): array => [
-                'id' => $card->id,
-                'name' => $card->name,
-                'brand' => $card->brand->value,
-                'brand_label' => $card->brand->label(),
-                'label' => $card->label,
-                'last_four_digits' => $card->last_four_digits,
-                'credit_limit_cents' => $card->credit_limit_cents,
-                'closing_day' => $card->closing_day,
-                'due_day' => $card->due_day,
-            ]);
-
         return Inertia::render('cards/index', [
-            'cards' => $cards,
+            'cards' => $buildCardsOverview->handle($request->user()),
         ]);
     }
 

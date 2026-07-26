@@ -29,6 +29,25 @@ export type CardOption = {
     due_day: number;
 };
 
+export type FeaturedPurchase = {
+    description: string;
+    merchant: string | null;
+    total_amount_cents: number;
+    paid_cents: number;
+    remaining_cents: number;
+    current_number: number;
+    installments_count: number;
+};
+
+export type CardOverview = CardSummary & {
+    committed_cents: number;
+    available_cents: number;
+    committed_ratio: number;
+    next_due_date: string | null;
+    next_due_cents: number;
+    featured: FeaturedPurchase | null;
+};
+
 export type MonthlyProjectionRow = {
     month: string;
     total_cents: number;
