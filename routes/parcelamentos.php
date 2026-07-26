@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CardController;
+use App\Http\Controllers\ExportHistoryController;
 use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\PurchaseController;
 use Illuminate\Support\Facades\Route;
@@ -18,4 +19,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('lancamentos/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy')->can('delete', 'purchase');
 
     Route::get('historico', [HistoryController::class, 'index'])->name('history.index');
+    Route::get('historico/exportar', ExportHistoryController::class)->name('history.export');
 });

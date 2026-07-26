@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { formatBRL, formatDate, formatMonthLabel } from '@/lib/currency';
+import history from '@/routes/history';
 import { index } from '@/routes/history';
 import purchases from '@/routes/purchases';
 import type {
@@ -67,9 +68,16 @@ export default function History({
             <Head title="Histórico de Parcelas" />
 
             <div className="space-y-6 p-4">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                    Histórico de Parcelas
-                </h1>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h1 className="text-2xl font-semibold tracking-tight">
+                        Histórico de Parcelas
+                    </h1>
+                    <Button variant="outline" asChild>
+                        <a href={history.export({ query: filters }).url}>
+                            Exportar CSV
+                        </a>
+                    </Button>
+                </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
                     <Card>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatBRL, formatDate, formatMonthLabel } from '@/lib/currency';
 import { dashboard } from '@/routes';
 import cards from '@/routes/cards';
+import history from '@/routes/history';
 import purchases from '@/routes/purchases';
 import type { DashboardSummary, MonthlyProjectionRow } from '@/types';
 
@@ -53,9 +54,18 @@ export default function Dashboard({ summary, projection }: DashboardProps) {
                             Sua saúde financeira nos próximos 6 meses
                         </p>
                     </div>
-                    <Button asChild>
-                        <Link href={purchases.create()}>Novo lançamento</Link>
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" asChild>
+                            <a href={history.export().url}>
+                                Exportar relatório
+                            </a>
+                        </Button>
+                        <Button asChild>
+                            <Link href={purchases.create()}>
+                                Novo lançamento
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-3">
