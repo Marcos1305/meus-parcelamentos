@@ -1,0 +1,57 @@
+<?php
+
+namespace App\Models;
+
+use Carbon\CarbonImmutable;
+use Database\Factories\PurchaseFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
+
+/**
+ * @property int $id
+ * @property int $card_id
+ * @property string $description
+ * @property string|null $merchant
+ * @property int $total_amount_cents
+ * @property int $installments_count
+ * @property CarbonImmutable $purchased_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Card $card
+ * @property-read Collection<int, Installment> $installments
+ */
+#[Fillable(['card_id', 'description', 'merchant', 'total_amount_cents', 'installments_count', 'purchased_at'])]
+class Purchase extends Model
+{
+    /** @use HasFactory<PurchaseFactory> */
+    use HasFactory;
+
+    /** @return BelongsTo<Card, $this> */
+    public function card(): BelongsTo
+    {
+        return $this->belongsTo(Card::class);
+    }
+
+    /** @return HasMany<Installment, $this> */
+    public function installments(): HasMany
+    {
+        return $this->hasMany(Installment::class)->orderBy('number');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'purchased_at' => 'immutable_date',
+            'total_amount_cents' => 'integer',
+            'installments_count' => 'integer',
+        ];
+    }
+}
