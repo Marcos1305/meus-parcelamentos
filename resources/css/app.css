@@ -63,31 +63,31 @@
 }
 
 :root {
-    --background: #f8f8f5;
-    --foreground: #1e1b11;
+    --background: #f2f3f5;
+    --foreground: #1b1c1e;
     --card: #ffffff;
-    --card-foreground: #1e1b11;
+    --card-foreground: #1b1c1e;
     --popover: #ffffff;
-    --popover-foreground: #1e1b11;
+    --popover-foreground: #1b1c1e;
     --primary: #d9b70b;
     --primary-foreground: #ffffff;
     --secondary: #655f3f;
     --secondary-foreground: #ffffff;
-    --muted: #f5eddc;
-    --muted-foreground: #4c4733;
-    --accent: #efe7d7;
-    --accent-foreground: #1e1b11;
+    --muted: #f1f2f4;
+    --muted-foreground: #45474b;
+    --accent: #eaebee;
+    --accent-foreground: #1b1c1e;
     --destructive: #ba1a1a;
     --destructive-foreground: #ffffff;
-    --border: #cfc6ad;
-    --input: #cfc6ad;
+    --border: #c5c7cc;
+    --input: #c5c7cc;
     --ring: #d9b70b;
     --status-upcoming: #584800;
     --chart-1: #d9b70b;
     --chart-2: #181711;
     --chart-3: #655f3f;
     --chart-4: #2a609d;
-    --chart-5: #cfc6ad;
+    --chart-5: #c5c7cc;
     --radius: 0.5rem;
     --sidebar: #181711;
     --sidebar-foreground: #ffffff;
@@ -100,31 +100,31 @@
 }
 
 .dark {
-    --background: #14130e;
-    --foreground: #e9e2d1;
-    --card: #1e1b11;
-    --card-foreground: #e9e2d1;
-    --popover: #1e1b11;
-    --popover-foreground: #e9e2d1;
+    --background: #131416;
+    --foreground: #e3e5e8;
+    --card: #1b1c1e;
+    --card-foreground: #e3e5e8;
+    --popover: #1b1c1e;
+    --popover-foreground: #e3e5e8;
     --primary: #e7c421;
     --primary-foreground: #221b00;
     --secondary: #d0c7a0;
     --secondary-foreground: #201c03;
-    --muted: #2a2921;
-    --muted-foreground: #cfc6ad;
-    --accent: #343025;
-    --accent-foreground: #e9e2d1;
+    --muted: #26282b;
+    --muted-foreground: #c5c7cc;
+    --accent: #303134;
+    --accent-foreground: #e3e5e8;
     --destructive: #ffb4ab;
     --destructive-foreground: #690005;
-    --border: #4c4733;
-    --input: #4c4733;
+    --border: #45474b;
+    --input: #45474b;
     --ring: #e7c421;
     --status-upcoming: #ffe16d;
     --chart-1: #e7c421;
-    --chart-2: #7e7761;
+    --chart-2: #75777c;
     --chart-3: #d0c7a0;
     --chart-4: #a4c9ff;
-    --chart-5: #4c4733;
+    --chart-5: #45474b;
     --sidebar: #181711;
     --sidebar-foreground: #ffffff;
     --sidebar-primary: #e7c421;
