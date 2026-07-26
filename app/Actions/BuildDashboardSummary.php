@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Models\Installment;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 
 class BuildDashboardSummary
 {
@@ -14,6 +15,7 @@ class BuildDashboardSummary
      *     total_due_cents: int,
      *     next_due_date: string|null,
      *     next_due_cents: int,
+     *     paid_this_month_cents: int,
      * }
      */
     public function handle(User $user): array
@@ -34,6 +36,14 @@ class BuildDashboardSummary
             'total_due_cents' => (int) (clone $open)->sum('amount_cents'),
             'next_due_date' => $nextDueDate,
             'next_due_cents' => $nextDueCents,
+            'paid_this_month_cents' => (int) Installment::query()
+                ->forUser($user)
+                ->paid()
+                ->whereBetween('due_date', [
+                    CarbonImmutable::now()->startOfMonth()->toDateString(),
+                    CarbonImmutable::now()->endOfMonth()->toDateString(),
+                ])
+                ->sum('amount_cents'),
         ];
     }
 }

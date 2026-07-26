@@ -80,7 +80,17 @@ it('devolve resumo zerado quando nao ha nada', function (): void {
         'total_due_cents' => 0,
         'next_due_date' => null,
         'next_due_cents' => 0,
+        'paid_this_month_cents' => 0,
     ]);
+});
+
+it('soma o que ja venceu no mes corrente', function (): void {
+    $user = User::factory()->create();
+    installmentOn($user, '2026-07-01', 245_00);
+    installmentOn($user, '2026-07-20', 100_00);
+    installmentOn($user, '2026-06-01', 999_00);
+
+    expect(app(BuildDashboardSummary::class)->handle($user)['paid_this_month_cents'])->toBe(245_00);
 });
 
 it('projeta seis meses a partir do corrente', function (): void {

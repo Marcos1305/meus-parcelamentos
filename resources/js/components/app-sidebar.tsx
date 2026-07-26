@@ -3,6 +3,7 @@ import {
     BookOpen,
     CreditCard,
     FolderGit2,
+    History as HistoryIcon,
     LayoutGrid,
     Plus,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import cards from '@/routes/cards';
+import history from '@/routes/history';
 import purchases from '@/routes/purchases';
 import type { NavItem } from '@/types';
 
@@ -35,6 +37,11 @@ const mainNavItems: NavItem[] = [
         title: 'Meus Cartões',
         href: cards.index(),
         icon: CreditCard,
+    },
+    {
+        title: 'Histórico',
+        href: history.index(),
+        icon: HistoryIcon,
     },
 ];
 

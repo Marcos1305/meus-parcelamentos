@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatBRL, formatDate } from '@/lib/currency';
 import { create, destroy, edit, index } from '@/routes/cards';
+import history from '@/routes/history';
 import type { CardOverview } from '@/types';
 
 export default function CardsIndex({ cards }: { cards: CardOverview[] }) {
@@ -218,6 +219,24 @@ export default function CardsIndex({ cards }: { cards: CardOverview[] }) {
                                             >
                                                 <Link href={edit(card.id)}>
                                                     <Pencil /> Editar
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                asChild
+                                            >
+                                                <Link
+                                                    href={history.index({
+                                                        query: {
+                                                            card: String(
+                                                                card.id,
+                                                            ),
+                                                            month: 'all',
+                                                        },
+                                                    })}
+                                                >
+                                                    Detalhes
                                                 </Link>
                                             </Button>
                                             <Button

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CardController;
+use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\PurchaseController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,4 +16,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('lancamentos/novo', [PurchaseController::class, 'create'])->name('purchases.create');
     Route::post('lancamentos', [PurchaseController::class, 'store'])->name('purchases.store');
     Route::delete('lancamentos/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy')->can('delete', 'purchase');
+
+    Route::get('historico', [HistoryController::class, 'index'])->name('history.index');
 });

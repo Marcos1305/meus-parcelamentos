@@ -59,6 +59,48 @@ export type DashboardSummary = {
     total_due_cents: number;
     next_due_date: string | null;
     next_due_cents: number;
+    paid_this_month_cents: number;
+};
+
+export type InstallmentStatus = 'paid' | 'upcoming' | 'pending';
+
+export type HistoryRow = {
+    id: number;
+    number: number;
+    amount_cents: number;
+    due_date: string;
+    status: InstallmentStatus;
+    purchase: {
+        id: number;
+        description: string;
+        merchant: string | null;
+        total_amount_cents: number;
+        installments_count: number;
+    };
+    card: {
+        name: string;
+        last_four_digits: string;
+    };
+};
+
+export type Paginated<T> = {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    links: { url: string | null; label: string; active: boolean }[];
+};
+
+export type HistoryFilters = {
+    month: string;
+    status: string;
+    card: string;
+};
+
+export type FinanceTip = {
+    count: number;
+    freed_cents: number;
+    next_month: string;
 };
 
 export type CardFormValues = {
