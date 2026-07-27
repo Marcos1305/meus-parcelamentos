@@ -75,10 +75,14 @@ O dia vem da data impressa na linha; o mês sai da conta. Descartada a alternati
 
 **Passo 2 — verificar por round-trip:**
 
-Roda `BuildInstallmentSchedule` com a data resolvida e confere se a parcela nº N caiu exatamente no vencimento da fatura.
+Roda `BuildInstallmentSchedule` com a data resolvida e confere se a parcela nº N caiu no **mês** de vencimento da fatura.
 
 - Bateu → `matched`
 - Não bateu → `divergent`: vai para revisão desmarcada, com a data editável. Nunca é gravado às cegas.
+
+A comparação é por mês, não por data exata, porque emissores deslocam o vencimento que cai em fim de semana ou feriado: um cartão com `due_day = 10` recebe fatura vencendo em 11/05 se 10/05 for domingo. Comparar a data exata marcaria como divergente toda fatura nessa situação, enchendo a revisão de falso-positivo. O erro que importa — mês errado, que desloca o cronograma inteiro — continua sendo pego.
+
+Pela mesma razão, a aritmética de `firstDue` opera sobre meses e só depois reconstrói o dia a partir de `due_day`. Subtrair meses de uma data já truncada (28/02 vindo de um `due_day = 31`) perde informação.
 
 O pipeline existente é usado como *verificador*, não só como gerador. Quando a conta não fecha, o app admite que não sabe.
 
