@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\PopplerTextExtractor;
+use App\Invoices\ResolveInvoiceParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             ExtractsInvoiceText::class,
             PopplerTextExtractor::class,
+        );
+
+        // As quatro classes de parser sao criadas nas Tasks 9-12; ate la, a
+        // lista vazia faz ResolveInvoiceParser sempre lancar UnsupportedInvoiceException.
+        $this->app->bind(
+            ResolveInvoiceParser::class,
+            fn (): ResolveInvoiceParser => new ResolveInvoiceParser([]),
         );
     }
 
