@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\GenerateInstallments;
 use App\Http\Requests\AnalyzeInvoiceRequest;
+use App\Http\Requests\ConfirmInvoiceImportRequest;
 use App\Invoices\BuildInvoiceCandidates;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceCandidate;
@@ -11,9 +13,11 @@ use App\Invoices\ResolveInvoiceParser;
 use App\Invoices\UnreadableInvoiceException;
 use App\Invoices\UnsupportedInvoiceException;
 use App\Models\Card;
+use App\Models\Purchase;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -101,6 +105,54 @@ class InvoiceImportController extends Controller
             ],
             'candidates' => $import['candidates'],
         ]);
+    }
+
+    public function confirm(
+        ConfirmInvoiceImportRequest $request,
+        GenerateInstallments $generateInstallments,
+    ): RedirectResponse {
+        $import = $request->session()->get('invoice_import');
+
+        if (! is_array($import)) {
+            return to_route('invoice-imports.create');
+        }
+
+        $card = Card::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail((int) $import['card_id']);
+
+        /** @var array<int, array{index: int, purchased_at: string}> $lines */
+        $lines = $request->validated('lines');
+
+        DB::transaction(function () use ($lines, $import, $card, $generateInstallments): void {
+            foreach ($lines as $line) {
+                $candidate = InvoiceCandidate::fromArray($import['candidates'][$line['index']]);
+
+                if (! $candidate->status->isImportable()) {
+                    continue;
+                }
+
+                $purchase = Purchase::create([
+                    'card_id' => $card->id,
+                    'description' => $candidate->description,
+                    'merchant' => $candidate->merchant,
+                    'total_amount_cents' => $candidate->totalAmountCents,
+                    'installments_count' => $candidate->installmentsCount,
+                    'purchased_at' => $line['purchased_at'],
+                ]);
+
+                $generateInstallments->handle($purchase->setRelation('card', $card));
+            }
+        });
+
+        $request->session()->forget('invoice_import');
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => 'Importação concluída.',
+        ]);
+
+        return to_route('history.index');
     }
 
     /**

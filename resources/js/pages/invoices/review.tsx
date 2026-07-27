@@ -1,5 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import InvoiceImportController from '@/actions/App/Http/Controllers/InvoiceImportController';
 import { CandidateStatusChip } from '@/components/candidate-status-chip';
 import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ export default function ReviewInvoice({
                 .filter((_, index) => selected[index]),
         }));
 
-        form.post('/importar/confirmar');
+        form.post(InvoiceImportController.confirm.url());
     };
 
     const selectedCount = selected.filter(Boolean).length;

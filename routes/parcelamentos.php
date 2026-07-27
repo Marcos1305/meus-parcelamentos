@@ -22,6 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('importar', [InvoiceImportController::class, 'create'])->name('invoice-imports.create');
     Route::post('importar', [InvoiceImportController::class, 'store'])->name('invoice-imports.store');
     Route::get('importar/revisao', [InvoiceImportController::class, 'review'])->name('invoice-imports.review');
+    Route::post('importar/confirmar', [InvoiceImportController::class, 'confirm'])->name('invoice-imports.confirm');
 
     Route::get('historico', [HistoryController::class, 'index'])->name('history.index');
     Route::get('historico/exportar', ExportHistoryController::class)->name('history.export');

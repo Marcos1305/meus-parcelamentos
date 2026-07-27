@@ -6,6 +6,7 @@ use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\ResolveInvoiceParser;
 use App\Models\Card;
+use App\Models\Purchase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
@@ -208,4 +209,118 @@ it('nao aceita cartao de outro usuario', function (): void {
 
 it('exige autenticacao', function (): void {
     $this->get(route('invoice-imports.create'))->assertRedirect(route('login'));
+});
+
+it('confirma a importacao e grava as compras com as parcelas', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('history.index'));
+
+    $purchase = Purchase::sole();
+
+    expect($purchase->card_id)->toBe($card->id)
+        ->and($purchase->total_amount_cents)->toBe(129_900)
+        ->and($purchase->installments_count)->toBe(10)
+        ->and($purchase->purchased_at->toDateString())->toBe('2026-03-02')
+        ->and($purchase->installments()->count())->toBe(10)
+        ->and($purchase->installments()->where('number', 3)->value('due_date'))
+        ->toEqual(CarbonImmutable::parse('2026-05-10'));
+});
+
+it('respeita a data corrigida na revisao', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-02-20']],
+    ]);
+
+    expect(Purchase::sole()->purchased_at->toDateString())->toBe('2026-02-20');
+});
+
+it('nao importa duas vezes a mesma fatura', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'duplicate'));
+});
+
+it('recusa confirmacao sem sessao de importacao', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('invoice-imports.create'));
+});
+
+it('recusa indice fora da lista de candidatos', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 99, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertSessionHasErrors('lines.0.index');
 });

@@ -2,11 +2,13 @@ import { Link } from '@inertiajs/react';
 import {
     BookOpen,
     CreditCard,
+    FileUp,
     FolderGit2,
     History as HistoryIcon,
     LayoutGrid,
     Plus,
 } from 'lucide-react';
+import InvoiceImportController from '@/actions/App/Http/Controllers/InvoiceImportController';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -42,6 +44,11 @@ const mainNavItems: NavItem[] = [
         title: 'Histórico',
         href: history.index(),
         icon: HistoryIcon,
+    },
+    {
+        title: 'Importar fatura',
+        href: InvoiceImportController.create(),
+        icon: FileUp,
     },
 ];
 
