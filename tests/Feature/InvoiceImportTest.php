@@ -620,6 +620,7 @@ it('nao grava compra em cartao de outro usuario mesmo com a sessao manipulada', 
                 'installment_number' => 3,
                 'installment_amount_cents' => 12_990,
                 'purchased_at' => '2026-03-02',
+                'first_due_date' => '2026-04-10',
                 'status' => 'matched',
             ]],
         ]])
@@ -991,6 +992,7 @@ it('recusa candidato com descricao maior que o permitido', function (): void {
                 'installment_number' => 3,
                 'installment_amount_cents' => 12_990,
                 'purchased_at' => '2026-03-02',
+                'first_due_date' => '2026-04-10',
                 'status' => 'matched',
             ]],
         ]])
@@ -1023,6 +1025,7 @@ it('recusa candidato com parcelas alem do limite do lancamento manual', function
                 'installment_number' => 3,
                 'installment_amount_cents' => 12_990,
                 'purchased_at' => '2026-03-02',
+                'first_due_date' => '2026-04-10',
                 'status' => 'matched',
             ]],
         ]])
@@ -1055,6 +1058,7 @@ it('recusa candidato com valor total zerado', function (): void {
                 'installment_number' => 3,
                 'installment_amount_cents' => 0,
                 'purchased_at' => '2026-03-02',
+                'first_due_date' => '2026-04-10',
                 'status' => 'matched',
             ]],
         ]])
@@ -1087,6 +1091,57 @@ it('sobrevive a uma sessao de importacao com forma desconhecida', function (): v
 
     $this->actingAs($user)
         ->withSession(['invoice_import' => ['formato' => 'de outra versao']])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('invoice-imports.create'))
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'A revisão da fatura expirou. Envie o PDF novamente.',
+        );
+
+    expect(Purchase::count())->toBe(0);
+});
+
+/**
+ * Sessao aberta antes de a deduplicacao passar a se ancorar no vencimento da
+ * primeira parcela: os candidatos guardados nao trazem esse campo. Oferecer a
+ * revisao seria prometer um lote que a gravacao recusaria inteiro, e o aviso
+ * de fim diria que as compras ja estavam no historico, o que e falso. O
+ * usuario recebe a instrucao que resolve: enviar o PDF de novo.
+ */
+it('manda enviar o pdf de novo quando a sessao nao traz o vencimento da primeira parcela', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $session = ['invoice_import' => [
+        'card_id' => $card->id,
+        'issuer' => 'Nubank',
+        'due_date' => '2026-05-10',
+        'candidates' => [[
+            'description' => 'MERCADOLIVRE*ABC',
+            'merchant' => 'Mercado Livre',
+            'total_amount_cents' => 129_900,
+            'installments_count' => 10,
+            'installment_number' => 3,
+            'installment_amount_cents' => 12_990,
+            'purchased_at' => '2026-03-02',
+            'status' => 'matched',
+        ]],
+    ]];
+
+    $this->actingAs($user)
+        ->withSession($session)
+        ->get(route('invoice-imports.review'))
+        ->assertRedirect(route('invoice-imports.create'))
+        ->assertSessionMissing('invoice_import');
+
+    $this->actingAs($user)
+        ->withSession($session)
         ->post(route('invoice-imports.confirm'), [
             'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
         ])
@@ -1147,6 +1202,7 @@ it('nao grava candidato cujo status guardado na sessao nao e reconhecido', funct
                 'installment_number' => 3,
                 'installment_amount_cents' => 12_990,
                 'purchased_at' => '2026-03-02',
+                'first_due_date' => '2026-04-10',
                 'status' => 'de outra versao',
             ]],
         ]])

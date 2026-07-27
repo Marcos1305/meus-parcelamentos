@@ -316,9 +316,13 @@ class InvoiceImportController extends Controller
      *
      * store() so grava a sessao com pelo menos uma linha parcelada, entao
      * uma lista de candidatos vazia nao e um lote vazio: e uma sessao que
-     * nao da mais para usar. Reconhecer isso aqui, no unico ponto que le a
-     * sessao, e o que impede review() e confirm() de discordarem sobre
-     * quais indices existem.
+     * nao da mais para usar. Um candidato sem o vencimento da primeira
+     * parcela e o mesmo caso: sem essa ancora a deteccao de duplicata nao
+     * funciona, e a revisao so teria a oferecer uma lista que a gravacao
+     * inteira recusaria em silencio. Reconhecer os dois aqui, no unico ponto
+     * que le a sessao, e o que impede review() e confirm() de discordarem
+     * sobre quais indices existem e o que da ao usuario a instrucao de
+     * enviar o PDF de novo em vez de um lote que nao grava nada.
      *
      * @return array{card_id: int, issuer: string, due_date: string, candidates: non-empty-array<int, array<string, mixed>>}|null
      */
@@ -336,7 +340,7 @@ class InvoiceImportController extends Controller
 
         $candidates = array_values(array_filter($import['candidates'], 'is_array'));
 
-        if ($candidates === []) {
+        if ($candidates === [] || ! $this->everyCandidateIsAnchored($candidates)) {
             return null;
         }
 
@@ -346,6 +350,24 @@ class InvoiceImportController extends Controller
             'due_date' => $import['due_date'],
             'candidates' => $candidates,
         ];
+    }
+
+    /**
+     * O vencimento da primeira parcela e a ancora da deteccao de duplicata.
+     * A sessao inteira e gravada de uma vez, entao ou todos os candidatos o
+     * trazem ou nenhum traz — e nenhum e uma sessao de outra versao do app.
+     *
+     * @param  array<int, array<string, mixed>>  $candidates
+     */
+    private function everyCandidateIsAnchored(array $candidates): bool
+    {
+        foreach ($candidates as $candidate) {
+            if (! is_string($candidate['first_due_date'] ?? null)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
