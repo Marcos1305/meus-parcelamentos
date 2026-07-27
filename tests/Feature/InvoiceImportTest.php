@@ -61,6 +61,15 @@ function fakeParserFor(ParsedInvoice $invoice): void
     ]));
 }
 
+/**
+ * Monta o estado em que nenhum emissor esta suportado. O gate deriva da lista
+ * de parsers, entao esvazia-la e a unica forma de exercitar esse caminho.
+ */
+function noParsersRegistered(): void
+{
+    app()->bind(ResolveInvoiceParser::class, fn (): ResolveInvoiceParser => new ResolveInvoiceParser([]));
+}
+
 function invoiceWithOneLine(string $lastFour = '8291'): ParsedInvoice
 {
     return new ParsedInvoice(
@@ -102,9 +111,25 @@ it('mostra o formulario de upload quando ha parser registrado', function (): voi
             ->where('invoiceImportAvailable', true));
 });
 
+/**
+ * Sem fake nenhum: o gate deriva da lista de parsers montada no container, e e
+ * esse binding real que precisa anunciar a importacao como disponivel.
+ */
+it('anuncia a importacao como disponivel com os parsers de producao', function (): void {
+    $user = User::factory()->create();
+
+    expect(app(ResolveInvoiceParser::class)->hasParsers())->toBeTrue();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('invoiceImportAvailable', true));
+});
+
 it('esconde a importacao enquanto nenhum parser estiver registrado', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create();
+
+    noParsersRegistered();
 
     $this->actingAs($user)
         ->get(route('invoice-imports.create'))
@@ -437,8 +462,9 @@ it('nao grava candidato duplicado mesmo que o indice seja submetido diretamente'
         ->get(route('invoice-imports.review'))
         ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'duplicate'));
 
-    // Data diferente da compra ja existente: o fingerprint de escrita (Important 3)
-    // nao pega essa duplicata sozinho, entao so o guard de isImportable() protege aqui.
+    // Data diferente da compra ja existente: a checagem de duplicata na escrita
+    // compara a data e por isso nao pega este caso, entao quem protege aqui e o
+    // guard de isImportable(), que rejeita candidato ja marcado como duplicado.
     $this->actingAs($user)->post(route('invoice-imports.confirm'), [
         'lines' => [['index' => 0, 'purchased_at' => '2026-04-15']],
     ]);

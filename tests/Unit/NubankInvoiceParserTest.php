@@ -66,3 +66,38 @@ it('recusa texto sem vencimento', function (): void {
     expect(fn () => (new NubankInvoiceParser)->parse('Nu Pagamentos S.A. sem data'))
         ->toThrow(UnreadableInvoiceException::class);
 });
+
+/**
+ * O sinal de menos desta fatura e o U+2212, nao o hifen ASCII. Um estorno
+ * parcelado abateria o valor em vez de cobra-lo, entao a linha e descartada.
+ */
+it('descarta uma linha parcelada com valor negativo', function (): void {
+    $text = "Data de vencimento: 09 JUL 2026\n02 JUN   •••• 5563   Mp *Petinolutuluvagov - Parcela 4/6      \u{2212}R\$ 44,04\n";
+
+    expect((new NubankInvoiceParser)->parse($text)->lines)->toHaveCount(0);
+});
+
+it('converte um valor na casa dos milhares corretamente', function (): void {
+    $text = "Data de vencimento: 09 JUL 2026\n02 JUN   •••• 5563   Mp *Petinolutuluvagov - Parcela 4/6      R\$ 1.234,56\n";
+
+    $lines = (new NubankInvoiceParser)->parse($text)->lines;
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]->amountCents)->toBe(123_456);
+});
+
+/**
+ * O numero do cartao virtual e opcional na linha: a fatura lista varios e nem
+ * toda compra parcelada carrega o seu.
+ */
+it('extrai uma linha parcelada sem o numero do cartao', function (): void {
+    $text = "Data de vencimento: 09 JUL 2026\n02 JUN   Mp *Petinolutuluvagov - Parcela 4/6      R\$ 44,04\n";
+
+    $lines = (new NubankInvoiceParser)->parse($text)->lines;
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]->description)->toBe('Mp *Petinolutuluvagov')
+        ->and($lines[0]->installmentNumber)->toBe(4)
+        ->and($lines[0]->installmentsCount)->toBe(6)
+        ->and($lines[0]->amountCents)->toBe(4_404);
+});

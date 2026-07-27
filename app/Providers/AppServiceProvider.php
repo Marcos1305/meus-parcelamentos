@@ -3,6 +3,10 @@
 namespace App\Providers;
 
 use App\Invoices\ExtractsInvoiceText;
+use App\Invoices\Parsers\ItauInvoiceParser;
+use App\Invoices\Parsers\MercadoPagoInvoiceParser;
+use App\Invoices\Parsers\NubankInvoiceParser;
+use App\Invoices\Parsers\RennerInvoiceParser;
 use App\Invoices\PopplerTextExtractor;
 use App\Invoices\ResolveInvoiceParser;
 use Carbon\CarbonImmutable;
@@ -24,13 +28,20 @@ class AppServiceProvider extends ServiceProvider
         );
 
         /**
-         * Nenhum parser de emissor esta registrado ainda. Enquanto a lista
-         * estiver vazia, ResolveInvoiceParser::hasParsers() e falso e a
-         * importacao de fatura se esconde da interface por conta propria.
+         * A lista de emissores suportados. Ela e a unica fonte do gate:
+         * ResolveInvoiceParser::hasParsers() deriva dela, e e isso que decide
+         * se a importacao de fatura aparece na interface. As assinaturas dos
+         * quatro sao mutuamente exclusivas, entao a ordem aqui nao altera qual
+         * parser atende cada fatura.
          */
         $this->app->bind(
             ResolveInvoiceParser::class,
-            fn (): ResolveInvoiceParser => new ResolveInvoiceParser([]),
+            fn (): ResolveInvoiceParser => new ResolveInvoiceParser([
+                new NubankInvoiceParser,
+                new MercadoPagoInvoiceParser,
+                new ItauInvoiceParser,
+                new RennerInvoiceParser,
+            ]),
         );
     }
 
