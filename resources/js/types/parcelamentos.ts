@@ -113,3 +113,16 @@ export type CardFormValues = {
     closing_day: number;
     due_day: number;
 };
+
+export type CandidateStatus = 'matched' | 'duplicate' | 'divergent';
+
+export type InvoiceCandidate = {
+    description: string;
+    merchant: string | null;
+    total_amount_cents: number;
+    installments_count: number;
+    installment_number: number;
+    installment_amount_cents: number;
+    purchased_at: string;
+    status: CandidateStatus;
+};
