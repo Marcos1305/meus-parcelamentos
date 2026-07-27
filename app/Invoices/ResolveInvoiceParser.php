@@ -10,6 +10,15 @@ class ResolveInvoiceParser
     public function __construct(private array $parsers) {}
 
     /**
+     * Sem nenhum parser registrado a importacao nao tem como funcionar, e a
+     * interface precisa saber disso para nao se anunciar como pronta.
+     */
+    public function hasParsers(): bool
+    {
+        return $this->parsers !== [];
+    }
+
+    /**
      * @throws UnsupportedInvoiceException
      */
     public function handle(string $text): InvoiceParser
@@ -20,8 +29,8 @@ class ResolveInvoiceParser
             }
         }
 
-        throw new UnsupportedInvoiceException(
-            'Emissor não reconhecido. Suportamos Nubank, Mercado Pago, Itaú e Renner.',
-        );
+        throw new UnsupportedInvoiceException($this->hasParsers()
+            ? 'Emissor não reconhecido. Suportamos Nubank, Mercado Pago, Itaú e Renner.'
+            : 'A importação de fatura ainda não está disponível.');
     }
 }

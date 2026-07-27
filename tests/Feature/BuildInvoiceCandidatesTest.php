@@ -68,6 +68,38 @@ it('marca como duplicata a compra que ja existe', function (): void {
     expect($candidates[0]->status)->toBe(CandidateStatus::Duplicate);
 });
 
+it('marca como duplicata a segunda linha identica dentro da mesma fatura', function (): void {
+    $card = Card::factory()->for(User::factory())->create(['closing_day' => 3, 'due_day' => 10]);
+
+    $candidates = app(BuildInvoiceCandidates::class)->handle(
+        parsedInvoice(
+            '2026-05-10',
+            parsedLine(3, 10, 2, 12_990),
+            parsedLine(3, 10, 2, 12_990),
+        ),
+        $card,
+    );
+
+    expect($candidates[0]->status)->toBe(CandidateStatus::Matched)
+        ->and($candidates[1]->status)->toBe(CandidateStatus::Duplicate);
+});
+
+it('nao marca duplicata quando as linhas resolvem para compras distintas', function (): void {
+    $card = Card::factory()->for(User::factory())->create(['closing_day' => 3, 'due_day' => 10]);
+
+    $candidates = app(BuildInvoiceCandidates::class)->handle(
+        parsedInvoice(
+            '2026-05-10',
+            parsedLine(3, 10, 2, 12_990),
+            parsedLine(3, 10, 2, 12_991),
+        ),
+        $card,
+    );
+
+    expect($candidates[0]->status)->toBe(CandidateStatus::Matched)
+        ->and($candidates[1]->status)->toBe(CandidateStatus::Matched);
+});
+
 it('nao confunde compra de outro cartao com duplicata', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create(['closing_day' => 3, 'due_day' => 10]);

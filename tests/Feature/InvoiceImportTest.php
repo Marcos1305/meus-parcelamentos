@@ -10,6 +10,23 @@ use App\Models\Purchase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+
+/**
+ * Guarda a senha que chegou ao extrator para provar que o campo do
+ * formulario continua ligado ao binario.
+ */
+final class RecordingExtractor implements ExtractsInvoiceText
+{
+    public ?string $password = null;
+
+    public function extract(string $path, ?string $password = null): string
+    {
+        $this->password = $password;
+
+        return 'texto qualquer';
+    }
+}
 
 function fakeExtractorReturning(string $text): void
 {
@@ -54,18 +71,41 @@ function invoiceWithOneLine(string $lastFour = '8291'): ParsedInvoice
     );
 }
 
-it('mostra o formulario de upload', function (): void {
+it('mostra o formulario de upload quando ha parser registrado', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create();
+
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('invoices/import')
+            ->where('invoiceImportAvailable', true));
+});
+
+it('esconde a importacao enquanto nenhum parser estiver registrado', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create();
 
     $this->actingAs($user)
         ->get(route('invoice-imports.create'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('invoices/import'));
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'A importação de fatura ainda não está disponível. Continue lançando suas compras manualmente.',
+        );
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('invoiceImportAvailable', false));
 });
 
 it('redireciona para o cadastro de cartao quando nao ha nenhum', function (): void {
     $user = User::factory()->create();
+
+    fakeParserFor(invoiceWithOneLine());
 
     $this->actingAs($user)
         ->get(route('invoice-imports.create'))
@@ -486,4 +526,346 @@ it('nao duplica a compra quando a data editada na revisao repete uma importacao 
     ]);
 
     expect(Purchase::count())->toBe(1);
+});
+
+it('entrega ao extrator a senha informada no formulario', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $extractor = new RecordingExtractor;
+    app()->instance(ExtractsInvoiceText::class, $extractor);
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+        'password' => 'senha-da-fatura',
+    ])->assertRedirect(route('invoice-imports.review'));
+
+    expect($extractor->password)->toBe('senha-da-fatura');
+});
+
+it('nao guarda o pdf enviado em lugar nenhum', function (): void {
+    Storage::fake('local');
+    Storage::fake('public');
+
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ]);
+
+    expect(Storage::disk('local')->allFiles())->toBe([])
+        ->and(Storage::disk('public')->allFiles())->toBe([]);
+});
+
+it('marca a segunda linha identica da mesma fatura como duplicata na revisao', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-05-10'),
+        lastFourDigits: '8291',
+        lines: [
+            new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990),
+            new ParsedInvoiceLine('MERCADO LIVRE', 'Mercado Livre', 2, 3, 10, 12_990),
+        ],
+    ));
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page
+            ->has('candidates', 2)
+            ->where('candidates.0.status', 'matched')
+            ->where('candidates.1.status', 'duplicate'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [
+            ['index' => 0, 'purchased_at' => '2026-03-02'],
+            ['index' => 1, 'purchased_at' => '2026-03-02'],
+        ],
+    ])->assertSessionHas(
+        'inertia.flash_data.toast.message',
+        '1 compra importada. 1 foi ignorada porque já constava no histórico.',
+    );
+
+    expect(Purchase::count())->toBe(1);
+});
+
+it('avisa quando nenhuma das compras marcadas foi importada', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    Purchase::create([
+        'card_id' => $card->id,
+        'description' => 'Mercado Livre',
+        'merchant' => 'Mercado Livre',
+        'total_amount_cents' => 129_900,
+        'installments_count' => 10,
+        'purchased_at' => '2026-03-02',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ])->assertSessionHas(
+        'inertia.flash_data.toast.message',
+        'Nenhuma compra importada: ela já constava no histórico.',
+    );
+
+    expect(Purchase::count())->toBe(1);
+});
+
+it('anuncia sucesso quando todas as compras marcadas foram importadas', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ])
+        ->assertSessionHas('inertia.flash_data.toast.message', '1 compra importada.')
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+});
+
+it('corrige a data de um candidato divergente e importa com ela', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 30,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-04-10'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('NOTEBOOK', 'Loja', 31, 1, 3, 50_000)],
+    ));
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('candidates.0.status', 'divergent')
+            ->where('candidates.0.purchased_at', '2026-02-28'));
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-15']],
+        ])
+        ->assertRedirect(route('history.index'));
+
+    $purchase = Purchase::sole();
+
+    expect($purchase->purchased_at->toDateString())->toBe('2026-03-15')
+        ->and($purchase->installments_count)->toBe(3)
+        ->and($purchase->installments()->where('number', 1)->value('due_date'))
+        ->toEqual(CarbonImmutable::parse('2026-04-10'));
+});
+
+it('recusa data de compra no futuro', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [[
+                'index' => 0,
+                'purchased_at' => CarbonImmutable::now()->addDay()->toDateString(),
+            ]],
+        ])
+        ->assertSessionHasErrors('lines.0.purchased_at');
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('recusa candidato com descricao maior que o permitido', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [[
+                'description' => str_repeat('A', 400),
+                'merchant' => 'Mercado Livre',
+                'total_amount_cents' => 129_900,
+                'installments_count' => 10,
+                'installment_number' => 3,
+                'installment_amount_cents' => 12_990,
+                'purchased_at' => '2026-03-02',
+                'status' => 'matched',
+            ]],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertSessionHasErrors('lines.0.index');
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('recusa candidato com parcelas alem do limite do lancamento manual', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [[
+                'description' => 'MERCADOLIVRE*ABC',
+                'merchant' => 'Mercado Livre',
+                'total_amount_cents' => 129_900,
+                'installments_count' => 200,
+                'installment_number' => 3,
+                'installment_amount_cents' => 12_990,
+                'purchased_at' => '2026-03-02',
+                'status' => 'matched',
+            ]],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertSessionHasErrors('lines.0.index');
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('recusa candidato com valor total zerado', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [[
+                'description' => 'MERCADOLIVRE*ABC',
+                'merchant' => 'Mercado Livre',
+                'total_amount_cents' => 0,
+                'installments_count' => 10,
+                'installment_number' => 3,
+                'installment_amount_cents' => 0,
+                'purchased_at' => '2026-03-02',
+                'status' => 'matched',
+            ]],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertSessionHasErrors('lines.0.index');
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('sobrevive a uma sessao de importacao com forma desconhecida', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => 'de outra versao',
+        ]])
+        ->get(route('invoice-imports.review'))
+        ->assertRedirect(route('invoice-imports.create'));
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => ['formato' => 'de outra versao']])
+        ->get(route('invoice-imports.review'))
+        ->assertRedirect(route('invoice-imports.create'));
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => ['formato' => 'de outra versao']])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('invoice-imports.create'))
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'A revisão da fatura expirou. Envie o PDF novamente.',
+        );
+
+    expect(Purchase::count())->toBe(0);
 });

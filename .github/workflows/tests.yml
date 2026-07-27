@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install poppler-utils
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Setup Application
         run: composer setup
 

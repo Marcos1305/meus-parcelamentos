@@ -16,18 +16,48 @@ class BuildInvoiceCandidates
      */
     public function handle(ParsedInvoice $invoice, Card $card): array
     {
-        return array_map(
-            fn (ParsedInvoiceLine $line): InvoiceCandidate => $this->markDuplicate(
-                $this->reconcileInvoiceLine->handle(
-                    $line,
-                    $invoice->dueDate,
-                    $card->closing_day,
-                    $card->due_day,
-                ),
-                $card,
-            ),
-            array_values($invoice->lines),
-        );
+        $candidates = [];
+        $seen = [];
+
+        foreach (array_values($invoice->lines) as $line) {
+            $candidate = $this->reconcileInvoiceLine->handle(
+                $line,
+                $invoice->dueDate,
+                $card->closing_day,
+                $card->due_day,
+            );
+
+            $fingerprint = $this->fingerprint($candidate);
+
+            $isDuplicate = isset($seen[$fingerprint])
+                || $this->purchaseAlreadyExists->handle(
+                    $card,
+                    $candidate->totalAmountCents,
+                    $candidate->installmentsCount,
+                    $candidate->purchasedAt,
+                );
+
+            $seen[$fingerprint] = true;
+
+            $candidates[] = $isDuplicate ? $this->asDuplicate($candidate) : $candidate;
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * Mesma assinatura de PurchaseAlreadyExists, sem o cartao: dentro de uma
+     * fatura o cartao e sempre o mesmo. Duas linhas que colidem aqui
+     * colapsariam numa unica compra na gravacao, entao a segunda precisa
+     * chegar a revisao marcada.
+     */
+    private function fingerprint(InvoiceCandidate $candidate): string
+    {
+        return implode('|', [
+            $candidate->totalAmountCents,
+            $candidate->installmentsCount,
+            $candidate->purchasedAt->toDateString(),
+        ]);
     }
 
     /**
@@ -35,19 +65,8 @@ class BuildInvoiceCandidates
      * ambas resolvem para a mesma assinatura. A descricao fica de fora: o
      * texto do estabelecimento varia entre faturas.
      */
-    private function markDuplicate(InvoiceCandidate $candidate, Card $card): InvoiceCandidate
+    private function asDuplicate(InvoiceCandidate $candidate): InvoiceCandidate
     {
-        $exists = $this->purchaseAlreadyExists->handle(
-            $card,
-            $candidate->totalAmountCents,
-            $candidate->installmentsCount,
-            $candidate->purchasedAt,
-        );
-
-        if (! $exists) {
-            return $candidate;
-        }
-
         return new InvoiceCandidate(
             description: $candidate->description,
             merchant: $candidate->merchant,

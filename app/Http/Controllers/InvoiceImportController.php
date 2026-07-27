@@ -20,6 +20,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,8 +28,17 @@ use RuntimeException;
 
 class InvoiceImportController extends Controller
 {
-    public function create(Request $request): Response|RedirectResponse
+    public function create(Request $request, ResolveInvoiceParser $resolveParser): Response|RedirectResponse
     {
+        if (! $resolveParser->hasParsers()) {
+            Inertia::flash('toast', [
+                'type' => 'info',
+                'message' => 'A importação de fatura ainda não está disponível. Continue lançando suas compras manualmente.',
+            ]);
+
+            return to_route('dashboard');
+        }
+
         $cards = $this->cardOptions($request);
 
         if ($cards->isEmpty()) {
@@ -81,15 +91,15 @@ class InvoiceImportController extends Controller
 
     public function review(Request $request): Response|RedirectResponse
     {
-        $import = $request->session()->get('invoice_import');
+        $import = $this->importFromSession($request);
 
-        if (! is_array($import)) {
+        if ($import === null) {
             return to_route('invoice-imports.create');
         }
 
         $card = Card::query()
             ->where('user_id', $request->user()->id)
-            ->find((int) $import['card_id']);
+            ->find($import['card_id']);
 
         if ($card === null) {
             $request->session()->forget('invoice_import');
@@ -114,15 +124,20 @@ class InvoiceImportController extends Controller
         GenerateInstallments $generateInstallments,
         PurchaseAlreadyExists $purchaseAlreadyExists,
     ): RedirectResponse {
-        $import = $request->session()->get('invoice_import');
+        $import = $this->importFromSession($request);
 
-        if (! is_array($import)) {
+        if ($import === null) {
+            Inertia::flash('toast', [
+                'type' => 'warning',
+                'message' => 'A revisão da fatura expirou. Envie o PDF novamente.',
+            ]);
+
             return to_route('invoice-imports.create');
         }
 
         $card = Card::query()
             ->where('user_id', $request->user()->id)
-            ->findOrFail((int) $import['card_id']);
+            ->findOrFail($import['card_id']);
 
         /** @var array<int, array{index: int, purchased_at: string}> $lines */
         $lines = $request->validated('lines');
@@ -165,19 +180,79 @@ class InvoiceImportController extends Controller
 
         $request->session()->forget('invoice_import');
 
-        Inertia::flash('toast', [
-            'type' => 'success',
-            'message' => $imported === 1
-                ? '1 compra importada.'
-                : "{$imported} compras importadas.",
-        ]);
+        Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported));
 
         return to_route('history.index');
     }
 
     /**
+     * O usuario marcou N linhas e o botao prometeu N compras. Quando a
+     * gravacao pula alguma — duplicata dentro da propria fatura ou compra que
+     * ja existia — a mensagem precisa dizer isso em vez de comemorar um
+     * numero que nao aconteceu.
+     *
+     * @return array{type: string, message: string}
+     */
+    private function importToast(int $imported, int $skipped): array
+    {
+        if ($imported === 0) {
+            return [
+                'type' => 'info',
+                'message' => $skipped === 1
+                    ? 'Nenhuma compra importada: ela já constava no histórico.'
+                    : 'Nenhuma compra importada: todas já constavam no histórico.',
+            ];
+        }
+
+        $importedText = $imported === 1
+            ? '1 compra importada.'
+            : "{$imported} compras importadas.";
+
+        if ($skipped === 0) {
+            return ['type' => 'success', 'message' => $importedText];
+        }
+
+        return [
+            'type' => 'info',
+            'message' => $skipped === 1
+                ? $importedText.' 1 foi ignorada porque já constava no histórico.'
+                : $importedText." {$skipped} foram ignoradas porque já constavam no histórico.",
+        ];
+    }
+
+    /**
+     * A sessao dura duas horas e sobrevive a deploy, entao a forma guardada
+     * pode ser de uma versao anterior do app.
+     *
+     * @return array{card_id: int, issuer: string, due_date: string, candidates: array<int, array<string, mixed>>}|null
+     */
+    private function importFromSession(Request $request): ?array
+    {
+        $import = $request->session()->get('invoice_import');
+
+        if (! is_array($import)
+            || ! is_numeric($import['card_id'] ?? null)
+            || ! is_string($import['issuer'] ?? null)
+            || ! is_string($import['due_date'] ?? null)
+            || ! is_array($import['candidates'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'card_id' => (int) $import['card_id'],
+            'issuer' => $import['issuer'],
+            'due_date' => $import['due_date'],
+            'candidates' => array_values(array_filter($import['candidates'], 'is_array')),
+        ];
+    }
+
+    /**
      * A extracao e a fronteira com o processo externo: e o unico ponto onde
      * a falha vira mensagem de validacao em vez de subir.
+     *
+     * So a mensagem da excecao vai para o log. Uma fatura carrega nome, CPF,
+     * numero do cartao e todas as compras do usuario: nem o texto extraido,
+     * nem o caminho do arquivo, nem a senha podem sair daqui.
      */
     private function extractText(ExtractsInvoiceText $extractor, AnalyzeInvoiceRequest $request): string
     {
@@ -187,6 +262,10 @@ class InvoiceImportController extends Controller
                 $request->string('password')->value(),
             );
         } catch (RuntimeException $exception) {
+            Log::warning('Falha ao extrair o texto do PDF da fatura.', [
+                'exception' => $exception->getMessage(),
+            ]);
+
             throw ValidationException::withMessages([
                 'invoice' => 'Não foi possível ler o PDF. Se ele tiver senha, informe-a abaixo.',
             ]);

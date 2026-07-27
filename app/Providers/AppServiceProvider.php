@@ -23,8 +23,11 @@ class AppServiceProvider extends ServiceProvider
             PopplerTextExtractor::class,
         );
 
-        // As quatro classes de parser sao criadas nas Tasks 9-12; ate la, a
-        // lista vazia faz ResolveInvoiceParser sempre lancar UnsupportedInvoiceException.
+        /**
+         * Nenhum parser de emissor esta registrado ainda. Enquanto a lista
+         * estiver vazia, ResolveInvoiceParser::hasParsers() e falso e a
+         * importacao de fatura se esconde da interface por conta propria.
+         */
         $this->app->bind(
             ResolveInvoiceParser::class,
             fn (): ResolveInvoiceParser => new ResolveInvoiceParser([]),

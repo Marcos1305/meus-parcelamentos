@@ -31,6 +31,15 @@ class Purchase extends Model
     /** @use HasFactory<PurchaseFactory> */
     use HasFactory;
 
+    /**
+     * Limites de dominio de uma compra, compartilhados entre o lancamento
+     * manual e a importacao de fatura para que os dois caminhos de escrita
+     * nunca divirjam sobre o que e uma compra valida.
+     */
+    public const int MAX_DESCRIPTION_LENGTH = 120;
+
+    public const int MAX_INSTALLMENTS_COUNT = 48;
+
     /** @return BelongsTo<Card, $this> */
     public function card(): BelongsTo
     {

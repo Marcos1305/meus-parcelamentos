@@ -37,21 +37,34 @@ readonly class InvoiceCandidate
     }
 
     /**
-     * @param  array{description: string, merchant: string|null, total_amount_cents: int,
-     *     installments_count: int, installment_number: int, installment_amount_cents: int,
-     *     purchased_at: string, status: string}  $data
+     * O candidato volta da sessao, que dura duas horas e sobrevive a deploy:
+     * a forma guardada pode ser de uma versao anterior do app. Um campo que
+     * nao chega reconhecivel cai no status Duplicate, o unico que a gravacao
+     * recusa, para que forma estranha nunca vire compra.
+     *
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {
+        $purchasedAt = is_string($data['purchased_at'] ?? null)
+            ? $data['purchased_at']
+            : null;
+
+        $status = is_string($data['status'] ?? null)
+            ? CandidateStatus::tryFrom($data['status'])
+            : null;
+
         return new self(
-            description: $data['description'],
-            merchant: $data['merchant'],
-            totalAmountCents: $data['total_amount_cents'],
-            installmentsCount: $data['installments_count'],
-            installmentNumber: $data['installment_number'],
-            installmentAmountCents: $data['installment_amount_cents'],
-            purchasedAt: CarbonImmutable::parse($data['purchased_at']),
-            status: CandidateStatus::from($data['status']),
+            description: is_string($data['description'] ?? null) ? $data['description'] : '',
+            merchant: is_string($data['merchant'] ?? null) ? $data['merchant'] : null,
+            totalAmountCents: (int) ($data['total_amount_cents'] ?? 0),
+            installmentsCount: (int) ($data['installments_count'] ?? 0),
+            installmentNumber: (int) ($data['installment_number'] ?? 0),
+            installmentAmountCents: (int) ($data['installment_amount_cents'] ?? 0),
+            purchasedAt: $purchasedAt === null
+                ? CarbonImmutable::today()
+                : CarbonImmutable::parse($purchasedAt),
+            status: $status ?? CandidateStatus::Duplicate,
         );
     }
 }
