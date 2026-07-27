@@ -611,7 +611,7 @@ it('marca a segunda linha identica da mesma fatura como duplicata na revisao', f
         ],
     ])->assertSessionHas(
         'inertia.flash_data.toast.message',
-        '1 compra importada. 1 foi ignorada porque já constava no histórico.',
+        '1 compra importada. 1 foi ignorada: ela já constava no histórico ou não pôde ser lida.',
     );
 
     expect(Purchase::count())->toBe(1);
@@ -645,7 +645,7 @@ it('avisa quando nenhuma das compras marcadas foi importada', function (): void 
         'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
     ])->assertSessionHas(
         'inertia.flash_data.toast.message',
-        'Nenhuma compra importada: ela já constava no histórico.',
+        'Nenhuma compra foi importada: ela já constava no histórico ou não pôde ser lida.',
     );
 
     expect(Purchase::count())->toBe(1);
@@ -865,6 +865,69 @@ it('sobrevive a uma sessao de importacao com forma desconhecida', function (): v
         ->assertSessionHas(
             'inertia.flash_data.toast.message',
             'A revisão da fatura expirou. Envie o PDF novamente.',
+        );
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('nao quebra quando a sessao de importacao nao tem candidato nenhum', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('invoice-imports.create'))
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'A revisão da fatura expirou. Envie o PDF novamente.',
+        );
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('nao grava candidato cujo status guardado na sessao nao e reconhecido', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $card->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [[
+                'description' => 'MERCADOLIVRE*ABC',
+                'merchant' => 'Mercado Livre',
+                'total_amount_cents' => 129_900,
+                'installments_count' => 10,
+                'installment_number' => 3,
+                'installment_amount_cents' => 12_990,
+                'purchased_at' => '2026-03-02',
+                'status' => 'de outra versao',
+            ]],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('history.index'))
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'Nenhuma compra foi importada: ela já constava no histórico ou não pôde ser lida.',
         );
 
     expect(Purchase::count())->toBe(0);

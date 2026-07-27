@@ -94,6 +94,8 @@ class InvoiceImportController extends Controller
         $import = $this->importFromSession($request);
 
         if ($import === null) {
+            $request->session()->forget('invoice_import');
+
             return to_route('invoice-imports.create');
         }
 
@@ -187,20 +189,27 @@ class InvoiceImportController extends Controller
 
     /**
      * O usuario marcou N linhas e o botao prometeu N compras. Quando a
-     * gravacao pula alguma — duplicata dentro da propria fatura ou compra que
-     * ja existia — a mensagem precisa dizer isso em vez de comemorar um
-     * numero que nao aconteceu.
+     * gravacao pula alguma, a mensagem precisa dizer isso em vez de comemorar
+     * um numero que nao aconteceu.
+     *
+     * Sao dois os motivos de pulo — a compra ja existia ou o candidato nao
+     * chegou em estado que possa ser gravado — e a mensagem cobre os dois numa
+     * disjuncao em vez de afirmar so o primeiro. Separar os motivos custaria um
+     * contador e uma combinatoria de frases para um caso que so aparece com a
+     * sessao adulterada.
      *
      * @return array{type: string, message: string}
      */
     private function importToast(int $imported, int $skipped): array
     {
+        $skippedText = $skipped === 1
+            ? 'ela já constava no histórico ou não pôde ser lida'
+            : 'elas já constavam no histórico ou não puderam ser lidas';
+
         if ($imported === 0) {
             return [
                 'type' => 'info',
-                'message' => $skipped === 1
-                    ? 'Nenhuma compra importada: ela já constava no histórico.'
-                    : 'Nenhuma compra importada: todas já constavam no histórico.',
+                'message' => "Nenhuma compra foi importada: {$skippedText}.",
             ];
         }
 
@@ -212,11 +221,13 @@ class InvoiceImportController extends Controller
             return ['type' => 'success', 'message' => $importedText];
         }
 
+        $ignoredText = $skipped === 1
+            ? '1 foi ignorada'
+            : "{$skipped} foram ignoradas";
+
         return [
             'type' => 'info',
-            'message' => $skipped === 1
-                ? $importedText.' 1 foi ignorada porque já constava no histórico.'
-                : $importedText." {$skipped} foram ignoradas porque já constavam no histórico.",
+            'message' => "{$importedText} {$ignoredText}: {$skippedText}.",
         ];
     }
 
@@ -224,7 +235,13 @@ class InvoiceImportController extends Controller
      * A sessao dura duas horas e sobrevive a deploy, entao a forma guardada
      * pode ser de uma versao anterior do app.
      *
-     * @return array{card_id: int, issuer: string, due_date: string, candidates: array<int, array<string, mixed>>}|null
+     * store() so grava a sessao com pelo menos uma linha parcelada, entao
+     * uma lista de candidatos vazia nao e um lote vazio: e uma sessao que
+     * nao da mais para usar. Reconhecer isso aqui, no unico ponto que le a
+     * sessao, e o que impede review() e confirm() de discordarem sobre
+     * quais indices existem.
+     *
+     * @return array{card_id: int, issuer: string, due_date: string, candidates: non-empty-array<int, array<string, mixed>>}|null
      */
     private function importFromSession(Request $request): ?array
     {
@@ -238,11 +255,17 @@ class InvoiceImportController extends Controller
             return null;
         }
 
+        $candidates = array_values(array_filter($import['candidates'], 'is_array'));
+
+        if ($candidates === []) {
+            return null;
+        }
+
         return [
             'card_id' => (int) $import['card_id'],
             'issuer' => $import['issuer'],
             'due_date' => $import['due_date'],
-            'candidates' => array_values(array_filter($import['candidates'], 'is_array')),
+            'candidates' => $candidates,
         ];
     }
 
