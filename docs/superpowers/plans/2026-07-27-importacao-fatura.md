@@ -467,10 +467,24 @@ Recebe `closingDay`/`dueDay` soltos em vez do `Card` inteiro: mantém a classe t
 ```php
 <?php
 
+use App\Actions\BuildInstallmentSchedule;
+use App\Actions\CalculateFirstDueDate;
+use App\Actions\SplitIntoInstallments;
 use App\Invoices\CandidateStatus;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\ReconcileInvoiceLine;
 use Carbon\CarbonImmutable;
+
+/**
+ * tests/Unit nao sobe o container do Laravel (o Pest.php so estende
+ * TestCase em Feature), entao a dependencia e montada a mao.
+ */
+function reconciler(): ReconcileInvoiceLine
+{
+    return new ReconcileInvoiceLine(
+        new BuildInstallmentSchedule(new SplitIntoInstallments, new CalculateFirstDueDate),
+    );
+}
 
 function invoiceLine(int $number, int $count, int $day, int $amountCents = 12_990): ParsedInvoiceLine
 {
@@ -493,7 +507,7 @@ it('resolve a data da compra a partir do vencimento da fatura', function (
     int $dueDay,
     string $expectedPurchasedAt,
 ): void {
-    $candidate = app(ReconcileInvoiceLine::class)->handle(
+    $candidate = reconciler()->handle(
         invoiceLine($number, $count, $transactionDay),
         CarbonImmutable::parse($invoiceDueDate),
         $closingDay,
@@ -514,7 +528,7 @@ it('resolve a data da compra a partir do vencimento da fatura', function (
 ]);
 
 it('calcula o total como valor da parcela vezes a quantidade', function (): void {
-    $candidate = app(ReconcileInvoiceLine::class)->handle(
+    $candidate = reconciler()->handle(
         invoiceLine(3, 10, 2, 12_990),
         CarbonImmutable::parse('2026-05-10'),
         3,
@@ -528,7 +542,7 @@ it('calcula o total como valor da parcela vezes a quantidade', function (): void
 });
 
 it('marca como divergente quando o round-trip nao fecha', function (): void {
-    $candidate = app(ReconcileInvoiceLine::class)->handle(
+    $candidate = reconciler()->handle(
         invoiceLine(1, 3, 31),
         CarbonImmutable::parse('2026-05-10'),
         30,
@@ -539,7 +553,7 @@ it('marca como divergente quando o round-trip nao fecha', function (): void {
 });
 
 it('resolver e reprocessar sempre devolve o mes de vencimento alvo', function (): void {
-    $reconcile = app(ReconcileInvoiceLine::class);
+    $reconcile = reconciler();
 
     foreach ([1, 3, 10, 15, 28] as $closingDay) {
         foreach ([1, 5, 10, 20, 28] as $dueDay) {
@@ -567,7 +581,7 @@ it('resolver e reprocessar sempre devolve o mes de vencimento alvo', function ()
 php artisan test --compact --filter=ReconcileInvoiceLine
 ```
 
-Esperado: FAIL, `Target class [App\Invoices\ReconcileInvoiceLine] does not exist`.
+Esperado: FAIL, `Class "App\Invoices\ReconcileInvoiceLine" not found`.
 
 - [ ] **Step 3: Escrever a implementação**
 
