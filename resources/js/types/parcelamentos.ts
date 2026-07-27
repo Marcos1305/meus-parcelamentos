@@ -139,3 +139,44 @@ export type InvoiceCandidate = {
     first_due_date: string;
     status: CandidateStatus;
 };
+
+export type PlanCardMonth = {
+    computed_cents: number;
+    override_cents: number | null;
+    effective_cents: number;
+};
+
+export type PlanLineMonth = {
+    amount_cents: number | null;
+    effective_cents: number;
+};
+
+export type PlanCardRow = {
+    id: number;
+    name: string;
+    last_four_digits: string;
+    months: Record<string, PlanCardMonth>;
+};
+
+export type PlanLineRow = {
+    id: number;
+    kind: 'income' | 'expense';
+    name: string;
+    default_amount_cents: number;
+    position: number;
+    months: Record<string, PlanLineMonth>;
+};
+
+export type PlanMonthTotals = {
+    income_cents: number;
+    expense_cents: number;
+    balance_cents: number;
+};
+
+export type AnnualPlan = {
+    year: number;
+    months: string[];
+    cards: PlanCardRow[];
+    lines: PlanLineRow[];
+    totals: Record<string, PlanMonthTotals>;
+};
