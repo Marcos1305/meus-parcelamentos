@@ -1454,6 +1454,36 @@ it('renomeia a linha', function (): void {
     expect($line->fresh()->name)->toBe('Energia');
 });
 
+it('a seta para cima troca a linha com a vizinha', function (): void {
+    $user = User::factory()->create();
+    $primeira = BudgetLine::factory()->for($user)->create(['name' => 'Agua', 'position' => 0]);
+    $segunda = BudgetLine::factory()->for($user)->create(['name' => 'Energia', 'position' => 1]);
+
+    $this->actingAs($user)->patch(route('plan.lines.update', $segunda->id), [
+        'name' => $segunda->name,
+        'default_amount_cents' => $segunda->default_amount_cents,
+        'position' => 0,
+    ]);
+
+    expect($segunda->fresh()->position)->toBe(0)
+        ->and($primeira->fresh()->position)->toBe(1);
+});
+
+it('renumera as posicoes de zero sem buracos', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->create(['position' => 5]);
+    BudgetLine::factory()->for($user)->create(['position' => 9]);
+    $ultima = BudgetLine::factory()->for($user)->create(['position' => 40]);
+
+    $this->actingAs($user)->patch(route('plan.lines.update', $ultima->id), [
+        'name' => $ultima->name,
+        'default_amount_cents' => $ultima->default_amount_cents,
+        'position' => 40,
+    ]);
+
+    expect($user->budgetLines()->orderBy('position')->pluck('position')->all())->toBe([0, 1, 2]);
+});
+
 it('arquiva a linha em vez de apagar', function (): void {
     $user = User::factory()->create();
     $line = BudgetLine::factory()->for($user)->create();
@@ -1648,6 +1678,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreBudgetLineRequest;
 use App\Http\Requests\UpdateBudgetLineRequest;
+use App\Models\BudgetLine;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -1665,9 +1697,44 @@ class BudgetLineController extends Controller
 
     public function update(UpdateBudgetLineRequest $request, int $budgetLine): RedirectResponse
     {
-        $request->user()->budgetLines()->findOrFail($budgetLine)->update($request->validated());
+        $line = $request->user()->budgetLines()->findOrFail($budgetLine);
+
+        $line->update([
+            'name' => $request->validated('name'),
+            'default_amount_cents' => $request->validated('default_amount_cents'),
+        ]);
+
+        $this->reposition($request->user(), $line, (int) $request->validated('position'));
 
         return back();
+    }
+
+    /**
+     * Recoloca a linha no indice pedido e renumera todas de 0 a n-1.
+     *
+     * Gravar a posicao crua nao bastaria: as setas da tela mandam posicao
+     * menos um, e isso empata a linha movida com a vizinha. O empate cairia
+     * no id e a linha nao sairia do lugar em metade dos cliques. Reinserir e
+     * renumerar torna cada clique uma troca de verdade.
+     */
+    private function reposition(User $user, BudgetLine $moved, int $target): void
+    {
+        $others = $user->budgetLines()
+            ->where('id', '!=', $moved->id)
+            ->orderBy('position')
+            ->orderBy('id')
+            ->get()
+            ->values();
+
+        $index = max(0, min($target, $others->count()));
+
+        $others->take($index)
+            ->push($moved)
+            ->concat($others->skip($index))
+            ->values()
+            ->each(fn (BudgetLine $line, int $position) => $line
+                ->forceFill(['position' => $position])
+                ->save());
     }
 
     public function destroy(Request $request, int $budgetLine): RedirectResponse
@@ -1698,7 +1765,7 @@ Route::put('planejamento/cartoes/{card}/{month}', [MonthAmountController::class,
 - [ ] **Step 7: Rodar até passar**
 
 Rodar: `php artisan test --compact --filter=PlanEndpointsTest`
-Esperado: PASS, 18 testes.
+Esperado: PASS, 20 testes.
 
 - [ ] **Step 8: Provar que os testes não são vazios**
 
@@ -2286,7 +2353,7 @@ Em `plan-grid.tsx`, trocar `<td className={STICKY}>{line.name}</td>` (nas duas l
 
 As linhas de cartão **não** recebem este componente: cartão não é criado nem arquivado aqui.
 
-Limite conhecido da reordenação: as setas somam ou subtraem 1 na posição, sem trocar com a linha vizinha. Com posições consecutivas isso empata duas linhas na mesma posição, e o desempate cai no `id` (a ordenação de `BuildAnnualPlan` é `position` e depois `id`). O resultado é previsível mas nem sempre é uma troca limpa. Ordenação por arrasto, que resolveria de vez, exige biblioteca nova e está fora deste plano.
+As setas mandam `position ± 1`; o servidor reinsere a linha nesse índice e renumera todas de 0 a n-1, então cada clique é uma troca limpa (Task 5, `BudgetLineController::reposition`). Ordenação por arrasto exigiria biblioteca nova e está fora deste plano.
 
 - [ ] **Step 3: Encaixar os formulários**
 
@@ -2337,4 +2404,4 @@ Ao fim das 8 tarefas:
 composer run ci:check
 ```
 
-Esperado: Pint passa, PHPStan 0 erros, toda a suíte verde. A contagem de testes deve ter subido em pelo menos 43 (3 + 4 + 13 + 5 + 18) em relação aos 308 do início.
+Esperado: Pint passa, PHPStan 0 erros, toda a suíte verde. A contagem de testes deve ter subido em pelo menos 45 (3 + 4 + 13 + 5 + 20) em relação aos 308 do início.
