@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    /*
+     * Extracao de texto das faturas em PDF. O processo que atende as
+     * requisicoes nem sempre enxerga o mesmo PATH do shell: no Herd, por
+     * exemplo, /opt/homebrew/bin fica de fora. Aponte para o caminho
+     * absoluto quando "pdftotext" sozinho nao resolver.
+     */
+    'poppler' => [
+        'pdftotext' => env('PDFTOTEXT_PATH', 'pdftotext'),
+    ],
+
 ];

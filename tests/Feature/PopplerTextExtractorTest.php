@@ -1,5 +1,6 @@
 <?php
 
+use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\PopplerTextExtractor;
 
 function minimalPdfBytes(): string
@@ -39,3 +40,15 @@ it('falha com mensagem clara quando o arquivo nao e um pdf', function (): void {
 
     unlink($path);
 })->skip(fn (): bool => exec('command -v pdftotext') === '', 'pdftotext nao instalado');
+
+it('distingue binario ausente de pdf ilegivel', function (): void {
+    $path = tempnam(sys_get_temp_dir(), 'fatura').'.pdf';
+    file_put_contents($path, minimalPdfBytes());
+
+    $extractor = new PopplerTextExtractor('pdftotext-que-nao-existe');
+
+    expect(fn (): string => $extractor->extract($path))
+        ->toThrow(ExtractorUnavailableException::class);
+
+    unlink($path);
+});

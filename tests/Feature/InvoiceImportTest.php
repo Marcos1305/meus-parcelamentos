@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\GenerateInstallments;
+use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceParser;
 use App\Invoices\ParsedInvoice;
@@ -1216,4 +1217,24 @@ it('nao grava candidato cujo status guardado na sessao nao e reconhecido', funct
         );
 
     expect(Purchase::count())->toBe(0);
+});
+
+it('avisa que o leitor de pdf nao esta acessivel em vez de culpar a senha', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create();
+
+    app()->bind(ExtractsInvoiceText::class, fn (): ExtractsInvoiceText => new class implements ExtractsInvoiceText
+    {
+        public function extract(string $path, ?string $password = null): string
+        {
+            throw new ExtractorUnavailableException('pdftotext: not found');
+        }
+    });
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.store'), [
+            'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+            'password' => '16324',
+        ])
+        ->assertSessionHasErrors(['invoice' => 'O leitor de PDF não está instalado ou não está acessível no servidor. Não é problema do seu arquivo nem da senha.']);
 });

@@ -7,6 +7,7 @@ use App\Actions\GenerateInstallments;
 use App\Http\Requests\AnalyzeInvoiceRequest;
 use App\Http\Requests\ConfirmInvoiceImportRequest;
 use App\Invoices\BuildInvoiceCandidates;
+use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceCandidate;
 use App\Invoices\ParsedInvoice;
@@ -385,6 +386,14 @@ class InvoiceImportController extends Controller
                 $request->file('invoice')->getRealPath(),
                 $request->string('password')->value(),
             );
+        } catch (ExtractorUnavailableException $exception) {
+            Log::warning('O extrator de PDF nao esta acessivel.', [
+                'exception' => $exception->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'invoice' => 'O leitor de PDF não está instalado ou não está acessível no servidor. Não é problema do seu arquivo nem da senha.',
+            ]);
         } catch (RuntimeException $exception) {
             Log::warning('Falha ao extrair o texto do PDF da fatura.', [
                 'exception' => $exception->getMessage(),

@@ -24,7 +24,9 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(
             ExtractsInvoiceText::class,
-            PopplerTextExtractor::class,
+            fn (): PopplerTextExtractor => new PopplerTextExtractor(
+                config()->string('services.poppler.pdftotext'),
+            ),
         );
 
         /**
