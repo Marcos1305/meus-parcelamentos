@@ -17,7 +17,7 @@ export function PlanCell({ url, valueCents, isExplicit, hint }: PlanCellProps) {
         const trimmed = draft.trim();
         const next = trimmed === '' ? null : parseBRLToCents(trimmed);
 
-        if (next === valueCents && isExplicit) {
+        if (next === valueCents) {
             return;
         }
 
