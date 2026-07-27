@@ -12,12 +12,16 @@ class BuildInvoiceCandidates
     ) {}
 
     /**
+     * Duas linhas identicas na mesma fatura sao duas compras reais — uma
+     * assinatura cobrada duas vezes no mesmo dia, no mesmo cartao virtual. A
+     * deteccao de duplicata olha so para o que ja esta persistido, para que a
+     * repeticao dentro do lote continue importavel.
+     *
      * @return array<int, InvoiceCandidate>
      */
     public function handle(ParsedInvoice $invoice, Card $card): array
     {
         $candidates = [];
-        $seen = [];
 
         foreach (array_values($invoice->lines) as $line) {
             $candidate = $this->reconcileInvoiceLine->handle(
@@ -27,37 +31,17 @@ class BuildInvoiceCandidates
                 $card->due_day,
             );
 
-            $fingerprint = $this->fingerprint($candidate);
-
-            $isDuplicate = isset($seen[$fingerprint])
-                || $this->purchaseAlreadyExists->handle(
-                    $card,
-                    $candidate->totalAmountCents,
-                    $candidate->installmentsCount,
-                    $candidate->purchasedAt,
-                );
-
-            $seen[$fingerprint] = true;
+            $isDuplicate = $this->purchaseAlreadyExists->handle(
+                $card,
+                $candidate->totalAmountCents,
+                $candidate->installmentsCount,
+                $candidate->purchasedAt,
+            );
 
             $candidates[] = $isDuplicate ? $this->asDuplicate($candidate) : $candidate;
         }
 
         return $candidates;
-    }
-
-    /**
-     * Mesma assinatura de PurchaseAlreadyExists, sem o cartao: dentro de uma
-     * fatura o cartao e sempre o mesmo. Duas linhas que colidem aqui
-     * colapsariam numa unica compra na gravacao, entao a segunda precisa
-     * chegar a revisao marcada.
-     */
-    private function fingerprint(InvoiceCandidate $candidate): string
-    {
-        return implode('|', [
-            $candidate->totalAmountCents,
-            $candidate->installmentsCount,
-            $candidate->purchasedAt->toDateString(),
-        ]);
     }
 
     /**

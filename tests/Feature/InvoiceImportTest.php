@@ -71,6 +71,23 @@ function invoiceWithOneLine(string $lastFour = '8291'): ParsedInvoice
     );
 }
 
+/**
+ * Duas assinaturas iguais cobradas no mesmo dia e no mesmo cartao: mesma data,
+ * mesmo valor e mesma parcela, com o texto do estabelecimento variando.
+ */
+function invoiceWithTwoIdenticalLines(): ParsedInvoice
+{
+    return new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-05-10'),
+        lastFourDigits: '8291',
+        lines: [
+            new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990),
+            new ParsedInvoiceLine('MERCADO LIVRE', 'Mercado Livre', 2, 3, 10, 12_990),
+        ],
+    );
+}
+
 it('mostra o formulario de upload quando ha parser registrado', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create();
@@ -574,7 +591,7 @@ it('nao guarda o pdf enviado em lugar nenhum', function (): void {
         ->and(Storage::disk('public')->allFiles())->toBe([]);
 });
 
-it('marca a segunda linha identica da mesma fatura como duplicata na revisao', function (): void {
+it('importa as duas linhas identicas da mesma fatura como compras distintas', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create([
         'closing_day' => 3,
@@ -583,15 +600,7 @@ it('marca a segunda linha identica da mesma fatura como duplicata na revisao', f
     ]);
 
     fakeExtractorReturning('texto qualquer');
-    fakeParserFor(new ParsedInvoice(
-        issuer: 'Nubank',
-        dueDate: CarbonImmutable::parse('2026-05-10'),
-        lastFourDigits: '8291',
-        lines: [
-            new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990),
-            new ParsedInvoiceLine('MERCADO LIVRE', 'Mercado Livre', 2, 3, 10, 12_990),
-        ],
-    ));
+    fakeParserFor(invoiceWithTwoIdenticalLines());
 
     $this->actingAs($user)->post(route('invoice-imports.store'), [
         'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
@@ -602,6 +611,50 @@ it('marca a segunda linha identica da mesma fatura como duplicata na revisao', f
         ->assertInertia(fn ($page) => $page
             ->has('candidates', 2)
             ->where('candidates.0.status', 'matched')
+            ->where('candidates.1.status', 'matched'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [
+            ['index' => 0, 'purchased_at' => '2026-03-02'],
+            ['index' => 1, 'purchased_at' => '2026-03-02'],
+        ],
+    ])->assertSessionHas('inertia.flash_data.toast.message', '2 compras importadas.');
+
+    expect(Purchase::count())->toBe(2);
+});
+
+it('nao reimporta a fatura de duas linhas identicas ja importada', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithTwoIdenticalLines());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [
+            ['index' => 0, 'purchased_at' => '2026-03-02'],
+            ['index' => 1, 'purchased_at' => '2026-03-02'],
+        ],
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithTwoIdenticalLines());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page
+            ->where('candidates.0.status', 'duplicate')
             ->where('candidates.1.status', 'duplicate'));
 
     $this->actingAs($user)->post(route('invoice-imports.confirm'), [
@@ -609,12 +662,9 @@ it('marca a segunda linha identica da mesma fatura como duplicata na revisao', f
             ['index' => 0, 'purchased_at' => '2026-03-02'],
             ['index' => 1, 'purchased_at' => '2026-03-02'],
         ],
-    ])->assertSessionHas(
-        'inertia.flash_data.toast.message',
-        '1 compra importada. 1 foi ignorada: ela já constava no histórico ou não pôde ser lida.',
-    );
+    ]);
 
-    expect(Purchase::count())->toBe(1);
+    expect(Purchase::count())->toBe(2);
 });
 
 it('avisa quando nenhuma das compras marcadas foi importada', function (): void {

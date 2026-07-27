@@ -68,7 +68,7 @@ it('marca como duplicata a compra que ja existe', function (): void {
     expect($candidates[0]->status)->toBe(CandidateStatus::Duplicate);
 });
 
-it('marca como duplicata a segunda linha identica dentro da mesma fatura', function (): void {
+it('nao marca como duplicata duas linhas identicas da mesma fatura', function (): void {
     $card = Card::factory()->for(User::factory())->create(['closing_day' => 3, 'due_day' => 10]);
 
     $candidates = app(BuildInvoiceCandidates::class)->handle(
@@ -81,7 +81,7 @@ it('marca como duplicata a segunda linha identica dentro da mesma fatura', funct
     );
 
     expect($candidates[0]->status)->toBe(CandidateStatus::Matched)
-        ->and($candidates[1]->status)->toBe(CandidateStatus::Duplicate);
+        ->and($candidates[1]->status)->toBe(CandidateStatus::Matched);
 });
 
 it('nao marca duplicata quando as linhas resolvem para compras distintas', function (): void {

@@ -147,6 +147,13 @@ class InvoiceImportController extends Controller
         $imported = 0;
 
         DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, &$imported): void {
+            $alreadyInHistory = $this->fingerprintsAlreadyInHistory(
+                $lines,
+                $import['candidates'],
+                $card,
+                $purchaseAlreadyExists,
+            );
+
             foreach ($lines as $line) {
                 $candidate = InvoiceCandidate::fromArray($import['candidates'][$line['index']]);
 
@@ -156,12 +163,7 @@ class InvoiceImportController extends Controller
 
                 $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
 
-                if ($purchaseAlreadyExists->handle(
-                    $card,
-                    $candidate->totalAmountCents,
-                    $candidate->installmentsCount,
-                    $purchasedAt,
-                )) {
+                if ($alreadyInHistory[$this->fingerprint($candidate, $purchasedAt)] ?? false) {
                     continue;
                 }
 
@@ -185,6 +187,62 @@ class InvoiceImportController extends Controller
         Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported));
 
         return to_route('history.index');
+    }
+
+    /**
+     * A duplicata que interessa e a fatura ja importada antes, nao a linha que
+     * se repete dentro do lote: duas assinaturas iguais cobradas no mesmo dia
+     * sao duas compras reais. Perguntar dentro do laco consultaria uma tabela
+     * que o proprio laco esta gravando, e a segunda linha identica seria
+     * descartada por causa da primeira. A resposta e colhida aqui, contra o
+     * estado anterior a qualquer escrita do lote.
+     *
+     * A assinatura usa a data final vinda da revisao, nao a inferida, porque e
+     * ela que sera persistida.
+     *
+     * @param  array<int, array{index: int, purchased_at: string}>  $lines
+     * @param  non-empty-array<int, array<string, mixed>>  $candidates
+     * @return array<string, bool>
+     */
+    private function fingerprintsAlreadyInHistory(
+        array $lines,
+        array $candidates,
+        Card $card,
+        PurchaseAlreadyExists $purchaseAlreadyExists,
+    ): array {
+        $existing = [];
+
+        foreach ($lines as $line) {
+            $candidate = InvoiceCandidate::fromArray($candidates[$line['index']]);
+            $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
+            $fingerprint = $this->fingerprint($candidate, $purchasedAt);
+
+            if (array_key_exists($fingerprint, $existing)) {
+                continue;
+            }
+
+            $existing[$fingerprint] = $purchaseAlreadyExists->handle(
+                $card,
+                $candidate->totalAmountCents,
+                $candidate->installmentsCount,
+                $purchasedAt,
+            );
+        }
+
+        return $existing;
+    }
+
+    /**
+     * Chave local do mapa de compras preexistentes. O cartao fica de fora
+     * porque uma confirmacao inteira grava num unico cartao.
+     */
+    private function fingerprint(InvoiceCandidate $candidate, CarbonImmutable $purchasedAt): string
+    {
+        return implode('|', [
+            $candidate->totalAmountCents,
+            $candidate->installmentsCount,
+            $purchasedAt->toDateString(),
+        ]);
     }
 
     /**
