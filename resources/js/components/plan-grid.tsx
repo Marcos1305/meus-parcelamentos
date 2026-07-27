@@ -1,6 +1,15 @@
+import { PlanCell } from '@/components/plan-cell';
 import { formatBRL } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import planRoute from '@/routes/plan';
 import type { AnnualPlan } from '@/types';
+
+const amountRoutes = {
+    line: (budgetLine: number, month: string) =>
+        planRoute.lines.amount({ budgetLine, month }).url,
+    card: (card: number, month: string) =>
+        planRoute.cards.amount({ card, month }).url,
+};
 
 const MONTH_LABEL = new Intl.DateTimeFormat('pt-BR', {
     month: 'short',
@@ -46,11 +55,17 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                         <tr key={line.id}>
                             <td className={STICKY}>{line.name}</td>
                             {plan.months.map((month) => (
-                                <td key={month} className={BODY_CELL}>
-                                    {formatBRL(
-                                        line.months[month].effective_cents,
-                                    )}
-                                </td>
+                                <PlanCell
+                                    key={month}
+                                    url={amountRoutes.line(line.id, month)}
+                                    valueCents={
+                                        line.months[month].effective_cents
+                                    }
+                                    isExplicit={
+                                        line.months[month].amount_cents !== null
+                                    }
+                                    hint={null}
+                                />
                             ))}
                         </tr>
                     ))}
@@ -61,11 +76,26 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                                 {card.name} • {card.last_four_digits}
                             </td>
                             {plan.months.map((month) => (
-                                <td key={month} className={BODY_CELL}>
-                                    {formatBRL(
-                                        card.months[month].effective_cents,
-                                    )}
-                                </td>
+                                <PlanCell
+                                    key={month}
+                                    url={amountRoutes.card(card.id, month)}
+                                    valueCents={
+                                        card.months[month].effective_cents
+                                    }
+                                    isExplicit={
+                                        card.months[month].override_cents !==
+                                        null
+                                    }
+                                    hint={
+                                        card.months[month].override_cents ===
+                                        null
+                                            ? null
+                                            : `Parcelamentos: ${formatBRL(
+                                                  card.months[month]
+                                                      .computed_cents,
+                                              )}`
+                                    }
+                                />
                             ))}
                         </tr>
                     ))}
@@ -74,11 +104,17 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                         <tr key={line.id}>
                             <td className={STICKY}>{line.name}</td>
                             {plan.months.map((month) => (
-                                <td key={month} className={BODY_CELL}>
-                                    {formatBRL(
-                                        line.months[month].effective_cents,
-                                    )}
-                                </td>
+                                <PlanCell
+                                    key={month}
+                                    url={amountRoutes.line(line.id, month)}
+                                    valueCents={
+                                        line.months[month].effective_cents
+                                    }
+                                    isExplicit={
+                                        line.months[month].amount_cents !== null
+                                    }
+                                    hint={null}
+                                />
                             ))}
                         </tr>
                     ))}
