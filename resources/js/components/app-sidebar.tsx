@@ -1,6 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
+    CalendarRange,
     CreditCard,
     FileUp,
     FolderGit2,
@@ -26,6 +27,7 @@ import {
 import { dashboard } from '@/routes';
 import cards from '@/routes/cards';
 import history from '@/routes/history';
+import plan from '@/routes/plan';
 import purchases from '@/routes/purchases';
 import type { NavItem } from '@/types';
 
@@ -39,6 +41,11 @@ const mainNavItems: NavItem[] = [
         title: 'Meus Cartões',
         href: cards.index(),
         icon: CreditCard,
+    },
+    {
+        title: 'Planejamento',
+        href: plan.index(),
+        icon: CalendarRange,
     },
     {
         title: 'Histórico',
