@@ -30,6 +30,13 @@ use RuntimeException;
 
 class InvoiceImportController extends Controller
 {
+    /**
+     * O que sobra de um PDF sem camada de texto: o pdftotext devolve uma
+     * quebra de pagina por pagina e mais nada. O \f nao entra na lista
+     * padrao do trim().
+     */
+    private const BLANK_CHARS = " \t\n\r\0\x0B\f";
+
     public function create(Request $request, ResolveInvoiceParser $resolveParser): Response|RedirectResponse
     {
         if (! $resolveParser->hasParsers()) {
@@ -62,6 +69,8 @@ class InvoiceImportController extends Controller
         BuildInvoiceCandidates $buildCandidates,
     ): RedirectResponse {
         $text = $this->extractText($extractor, $request);
+
+        $this->refuseImageOnlyInvoice($text);
 
         try {
             $invoice = $resolveParser->handle($text)->parse($text);
@@ -403,6 +412,25 @@ class InvoiceImportController extends Controller
                 'invoice' => 'Não foi possível ler o PDF. Se ele tiver senha, informe-a abaixo.',
             ]);
         }
+    }
+
+    /**
+     * Um PDF que so contem imagem nao chega a ser lido: nenhum emissor casa
+     * porque nao ha uma letra para casar. Sem esta parada o usuario receberia
+     * "emissor nao reconhecido", que o manda procurar defeito no banco errado
+     * — o arquivo e que nao tem texto.
+     *
+     * @throws ValidationException
+     */
+    private function refuseImageOnlyInvoice(string $text): void
+    {
+        if (trim($text, self::BLANK_CHARS) !== '') {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'invoice' => 'Este PDF não tem texto, só imagem — é o caso de uma digitalização ou de uma página impressa pelo navegador. Baixe o arquivo original da fatura no app ou no site do banco.',
+        ]);
     }
 
     private function resolveCard(AnalyzeInvoiceRequest $request, ParsedInvoice $invoice): Card

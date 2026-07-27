@@ -251,6 +251,22 @@ it('recusa fatura de emissor desconhecido', function (): void {
         ->assertSessionHasErrors('invoice');
 });
 
+it('avisa que o pdf so tem imagem em vez de culpar o emissor', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create();
+
+    fakeExtractorReturning("\f\f\f");
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.store'), [
+            'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+        ])
+        ->assertSessionHasErrors([
+            'invoice' => 'Este PDF não tem texto, só imagem — é o caso de uma digitalização ou de uma página impressa pelo navegador. Baixe o arquivo original da fatura no app ou no site do banco.',
+        ]);
+});
+
 it('recusa fatura sem nenhuma linha parcelada', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create();
