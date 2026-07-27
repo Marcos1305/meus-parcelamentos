@@ -99,9 +99,28 @@ it('analisa a fatura e leva para a revisao', function (): void {
             ->where('candidates.0.total_amount_cents', 129_900));
 });
 
+it('nao expoe fatura de outro usuario guardada na sessao', function (): void {
+    $user = User::factory()->create();
+    $foreign = Card::factory()->for(User::factory())->create();
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $foreign->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [],
+        ]])
+        ->get(route('invoice-imports.review'))
+        ->assertRedirect(route('invoice-imports.create'))
+        ->assertSessionMissing('invoice_import');
+});
+
 it('recusa arquivo que nao e pdf', function (): void {
     $user = User::factory()->create();
-    Card::factory()->for($user)->create();
+    Card::factory()->for($user)->create(['last_four_digits' => '8291']);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
 
     $this->actingAs($user)
         ->post(route('invoice-imports.store'), [

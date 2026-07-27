@@ -81,7 +81,15 @@ class InvoiceImportController extends Controller
             return to_route('invoice-imports.create');
         }
 
-        $card = Card::query()->findOrFail((int) $import['card_id']);
+        $card = Card::query()
+            ->where('user_id', $request->user()->id)
+            ->find((int) $import['card_id']);
+
+        if ($card === null) {
+            $request->session()->forget('invoice_import');
+
+            return to_route('invoice-imports.create');
+        }
 
         return Inertia::render('invoices/review', [
             'issuer' => $import['issuer'],

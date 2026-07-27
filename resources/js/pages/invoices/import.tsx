@@ -1,4 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
+import { useState } from 'react';
 import InvoiceImportController from '@/actions/App/Http/Controllers/InvoiceImportController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
@@ -16,6 +17,8 @@ import {
 import type { CardOption } from '@/types';
 
 export default function ImportInvoice({ cards }: { cards: CardOption[] }) {
+    const [cardId, setCardId] = useState('');
+
     return (
         <>
             <Head title="Importar fatura" />
@@ -69,7 +72,15 @@ export default function ImportInvoice({ cards }: { cards: CardOption[] }) {
                                         <Label htmlFor="card_id">
                                             Cartão (opcional)
                                         </Label>
-                                        <Select name="card_id">
+                                        <input
+                                            type="hidden"
+                                            name="card_id"
+                                            value={cardId}
+                                        />
+                                        <Select
+                                            value={cardId}
+                                            onValueChange={setCardId}
+                                        >
                                             <SelectTrigger id="card_id">
                                                 <SelectValue placeholder="Identificar pelo PDF" />
                                             </SelectTrigger>
