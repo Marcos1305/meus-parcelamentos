@@ -55,7 +55,7 @@ it('extrai os campos de uma linha parcelada', function (): void {
         ->and($lines[0]->amountCents)->toBe(5_400)
         ->and($lines[0]->transactionDay)->toBe(26)
         ->and($lines[0]->description)->toBe('PONUFARABORI RIFULUSIG')
-        ->and($lines[0]->merchant)->toBe('PONUFARABORI RIFULUSIG');
+        ->and($lines[0]->merchant)->toBeNull();
 });
 
 it('recusa texto sem vencimento', function (): void {

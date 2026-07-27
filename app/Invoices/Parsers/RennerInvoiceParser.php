@@ -114,11 +114,9 @@ class RennerInvoiceParser implements InvoiceParser
                 continue;
             }
 
-            $establishment = trim($matches[6]);
-
             $lines[] = new ParsedInvoiceLine(
-                description: $establishment,
-                merchant: $establishment,
+                description: trim($matches[6]),
+                merchant: null,
                 transactionDay: (int) $matches[1],
                 installmentNumber: (int) $matches[4],
                 installmentsCount: (int) $matches[5],
