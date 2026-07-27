@@ -1,3 +1,5 @@
+import { BudgetLineCell } from '@/components/budget-line-cell';
+import { BudgetLineForm } from '@/components/budget-line-form';
 import { PlanCell } from '@/components/plan-cell';
 import { formatBRL } from '@/lib/currency';
 import { cn } from '@/lib/utils';
@@ -53,7 +55,9 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                 <tbody className="divide-y">
                     {incomeLines.map((line) => (
                         <tr key={line.id}>
-                            <td className={STICKY}>{line.name}</td>
+                            <td className={STICKY}>
+                                <BudgetLineCell line={line} />
+                            </td>
                             {plan.months.map((month) => (
                                 <PlanCell
                                     key={month}
@@ -69,6 +73,15 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                             ))}
                         </tr>
                     ))}
+
+                    <tr>
+                        <td
+                            colSpan={plan.months.length + 1}
+                            className="bg-muted/30"
+                        >
+                            <BudgetLineForm kind="income" />
+                        </td>
+                    </tr>
 
                     {plan.cards.map((card) => (
                         <tr key={`card-${card.id}`}>
@@ -102,7 +115,9 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
 
                     {expenseLines.map((line) => (
                         <tr key={line.id}>
-                            <td className={STICKY}>{line.name}</td>
+                            <td className={STICKY}>
+                                <BudgetLineCell line={line} />
+                            </td>
                             {plan.months.map((month) => (
                                 <PlanCell
                                     key={month}
@@ -118,6 +133,15 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                             ))}
                         </tr>
                     ))}
+
+                    <tr>
+                        <td
+                            colSpan={plan.months.length + 1}
+                            className="bg-muted/30"
+                        >
+                            <BudgetLineForm kind="expense" />
+                        </td>
+                    </tr>
                 </tbody>
 
                 <tfoot className="border-t-2">
