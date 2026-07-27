@@ -17,10 +17,10 @@ class BudgetLineController extends Controller
 
         $request->user()->budgetLines()->create([
             ...$request->validated(),
-            'position' => (int) $request->user()->budgetLines()
+            'position' => $request->user()->budgetLines()
                 ->active()
                 ->where('kind', $kind)
-                ->max('position') + 1,
+                ->count(),
         ]);
 
         return back();

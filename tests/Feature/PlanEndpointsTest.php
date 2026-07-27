@@ -138,7 +138,7 @@ it('cria uma linha no fim da lista', function (): void {
 
     $line = BudgetLine::query()->where('name', 'Internet')->firstOrFail();
 
-    expect($line->position)->toBe(5)
+    expect($line->position)->toBe(1)
         ->and($line->user_id)->toBe($user->id);
 });
 
@@ -286,6 +286,26 @@ it('cria renda e despesa no fim da fila do proprio tipo', function (): void {
         'default_amount_cents' => 30_00,
     ]);
 
-    expect(BudgetLine::query()->where('name', 'Freelance')->value('position'))->toBe(4)
-        ->and(BudgetLine::query()->where('name', 'Streaming')->value('position'))->toBe(8);
+    expect(BudgetLine::query()->where('name', 'Freelance')->value('position'))->toBe(1)
+        ->and(BudgetLine::query()->where('name', 'Streaming')->value('position'))->toBe(1);
+});
+
+it('renomear uma linha criada pelo store nao reordena as demais do mesmo tipo', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $this->post(route('plan.lines.store'), ['kind' => 'expense', 'name' => 'Agua', 'default_amount_cents' => 100_00]);
+    $this->post(route('plan.lines.store'), ['kind' => 'expense', 'name' => 'Luz', 'default_amount_cents' => 200_00]);
+    $this->post(route('plan.lines.store'), ['kind' => 'expense', 'name' => 'Net', 'default_amount_cents' => 300_00]);
+
+    $luz = BudgetLine::query()->where('name', 'Luz')->firstOrFail();
+
+    $this->patch(route('plan.lines.update', $luz->id), [
+        'name' => 'Energia',
+        'default_amount_cents' => $luz->default_amount_cents,
+        'position' => $luz->position,
+    ]);
+
+    expect($user->budgetLines()->orderBy('position')->pluck('name')->all())
+        ->toBe(['Agua', 'Energia', 'Net']);
 });
