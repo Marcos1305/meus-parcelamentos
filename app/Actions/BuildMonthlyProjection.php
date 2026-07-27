@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Models\Card;
 use App\Models\Installment;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -14,15 +15,21 @@ class BuildMonthlyProjection
      *
      * @return array<int, array{month: string, total_cents: int}>
      */
-    public function handle(User $user, int $months = 6): array
+    public function handle(User $user, ?Card $card = null, int $months = 6): array
     {
         $start = CarbonImmutable::now()->startOfMonth();
         $end = $start->addMonths($months)->subDay();
 
-        $totals = Installment::query()
+        $query = Installment::query()
             ->forUser($user)
             ->open()
-            ->whereDate('due_date', '<=', $end->toDateString())
+            ->whereDate('due_date', '<=', $end->toDateString());
+
+        if ($card !== null) {
+            $query->forCard($card);
+        }
+
+        $totals = $query
             ->get(['due_date', 'amount_cents'])
             ->groupBy(fn (Installment $installment): string => $installment->due_date->format('Y-m'))
             ->map(fn (Collection $group): int => (int) $group->sum('amount_cents'));

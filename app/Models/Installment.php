@@ -55,6 +55,15 @@ class Installment extends Model
     }
 
     /** @param Builder<Installment> $query */
+    public function scopeForCard(Builder $query, Card $card): void
+    {
+        $query->whereHas(
+            'purchase',
+            fn (Builder $purchases) => $purchases->where('card_id', $card->id),
+        );
+    }
+
+    /** @param Builder<Installment> $query */
     public function scopeOpen(Builder $query): void
     {
         $query->whereDate('due_date', '>=', CarbonImmutable::now()->toDateString());

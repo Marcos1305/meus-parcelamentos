@@ -62,10 +62,17 @@ export type DashboardSummary = {
     cards_count: number;
     open_installments_count: number;
     total_due_cents: number;
+    credit_limit_cents: number;
     next_due_date: string | null;
     next_due_cents: number;
+    last_due_date: string | null;
     paid_this_month_cents: number;
 };
+
+export type DashboardCardOption = Pick<
+    CardOption,
+    'id' | 'name' | 'last_four_digits'
+>;
 
 export type InstallmentStatus = 'paid' | 'upcoming' | 'pending';
 
