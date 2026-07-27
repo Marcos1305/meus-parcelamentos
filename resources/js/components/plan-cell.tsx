@@ -15,6 +15,13 @@ export function PlanCell({ url, valueCents, isExplicit, hint }: PlanCellProps) {
 
     function commit() {
         const trimmed = draft.trim();
+
+        if (trimmed !== '' && !/\d/.test(trimmed)) {
+            setDraft(formatBRL(valueCents));
+
+            return;
+        }
+
         const next = trimmed === '' ? null : parseBRLToCents(trimmed);
 
         if (next === valueCents) {
