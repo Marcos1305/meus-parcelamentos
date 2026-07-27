@@ -26,7 +26,7 @@ class ItauInvoiceParser implements InvoiceParser
      * baixo cada parcelamento da secao de detalhe reaparece com o numero da
      * parcela seguinte, o que geraria uma segunda compra fantasma por plano.
      */
-    private const FUTURE_INSTALLMENTS_MARKER = 'próximas faturas';
+    private const FUTURE_INSTALLMENTS_MARKER = 'Compras parceladas - próximas faturas';
 
     /**
      * Uma linha parcelada tem dia, mes, estabelecimento, o marcador "N/M"
@@ -34,14 +34,16 @@ class ItauInvoiceParser implements InvoiceParser
      * palavra "Parcela" em lugar nenhum: o marcador numerico e o unico sinal
      * que distingue uma compra parcelada de uma transacao avulsa.
      *
-     * O estabelecimento e uma sequencia de palavras separadas por um unico
-     * espaco. Essa restricao e o que impede a descricao de atravessar a
+     * O estabelecimento e uma sequencia de palavras separadas por no maximo
+     * dois espacos. Esse teto e o que impede a descricao de atravessar a
      * fronteira entre as duas colunas que o layout imprime numa mesma linha
-     * de texto: colunas sao separadas por corridas longas de espaco, entao
-     * uma descricao nunca consegue engolir o valor da coluna vizinha para
-     * alcancar o marcador da outra.
+     * de texto: a corrida de espacos mais estreita que separa colunas
+     * vizinhas tem quatro espacos (a distancia entre DATA e ESTABELECIMENTO),
+     * e a fronteira entre as colunas em si tem oito. Parar em dois deixa
+     * margem para os dois lados: absorve um espaco duplo dentro do nome do
+     * estabelecimento sem nunca alcancar a coluna ao lado.
      */
-    private const INSTALLMENT_LINE_PATTERN = '/(?<!\d)(\d{2})\/(\d{2})\s{2,}((?:\S+ )+?)(\d{1,2})\/(\d{1,2})\s{2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/u';
+    private const INSTALLMENT_LINE_PATTERN = '/(?<!\d)(\d{2})\/(\d{2}) {2,}((?:\S+ {1,2})+?)(\d{1,2})\/(\d{1,2}) {2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/u';
 
     public function supports(string $text): bool
     {

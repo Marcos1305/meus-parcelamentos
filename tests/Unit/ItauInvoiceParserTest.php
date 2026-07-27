@@ -78,6 +78,49 @@ it('ignora a secao de proximas faturas', function (): void {
     expect($lines)->toHaveCount(19);
 });
 
+it('extrai as duas parcelas de uma linha com duas colunas parceladas', function (): void {
+    $text = "Vencimento: 09/07/2026\n"
+        ."                 13/02    LOJA ESQUERDA 01/02                            10,00        14/03    LOJA DIREITA 03/04                             20,00\n";
+
+    $lines = (new ItauInvoiceParser)->parse($text)->lines;
+
+    expect($lines)->toHaveCount(2)
+        ->and($lines[0]->description)->toBe('LOJA ESQUERDA')
+        ->and($lines[0]->transactionDay)->toBe(13)
+        ->and($lines[0]->installmentNumber)->toBe(1)
+        ->and($lines[0]->amountCents)->toBe(1_000)
+        ->and($lines[1]->description)->toBe('LOJA DIREITA')
+        ->and($lines[1]->transactionDay)->toBe(14)
+        ->and($lines[1]->installmentNumber)->toBe(3)
+        ->and($lines[1]->amountCents)->toBe(2_000);
+});
+
+it('aceita espaco duplo dentro do nome do estabelecimento', function (string $estabelecimento): void {
+    $text = "Vencimento: 09/07/2026\n"
+        ."                 04/09    {$estabelecimento}                             129,01\n";
+
+    $lines = (new ItauInvoiceParser)->parse($text)->lines;
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]->amountCents)->toBe(12_901)
+        ->and($lines[0]->installmentNumber)->toBe(10);
+})->with([
+    'espaco duplo no meio do nome' => 'DOMO  SEVEROBOG 10/10',
+    'espaco duplo antes do marcador' => 'DOMO SEVEROBOG  10/10',
+]);
+
+it('nao deixa a descricao atravessar a fronteira entre colunas', function (): void {
+    $text = "Vencimento: 09/07/2026\n"
+        ."                 08/06    PAGAMENTO                                      -4.713,38        18/05    GOFUPI *SapalE 02/02                             111,30\n";
+
+    $lines = (new ItauInvoiceParser)->parse($text)->lines;
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0]->transactionDay)->toBe(18)
+        ->and($lines[0]->description)->toBe('GOFUPI *SapalE')
+        ->and($lines[0]->amountCents)->toBe(11_130);
+});
+
 it('converte um valor na casa dos milhares corretamente', function (): void {
     $text = "Vencimento: 09/07/2026\n                 13/02    COMERCIO TESTE 01/02                             1.234,56\n";
 
