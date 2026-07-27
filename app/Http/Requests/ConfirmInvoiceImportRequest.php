@@ -17,7 +17,7 @@ class ConfirmInvoiceImportRequest extends FormRequest
 
         return [
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.index' => ['required', 'integer', 'min:0', 'lt:'.max($total, 1)],
+            'lines.*.index' => ['required', 'integer', 'min:0', 'distinct', 'lt:'.max($total, 1)],
             'lines.*.purchased_at' => ['required', 'date'],
         ];
     }

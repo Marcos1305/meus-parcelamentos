@@ -324,3 +324,166 @@ it('recusa indice fora da lista de candidatos', function (): void {
         ])
         ->assertSessionHasErrors('lines.0.index');
 });
+
+it('recusa indices repetidos no mesmo payload de confirmacao', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [
+                ['index' => 0, 'purchased_at' => '2026-03-02'],
+                ['index' => 0, 'purchased_at' => '2026-03-02'],
+            ],
+        ])
+        ->assertSessionHasErrors('lines.0.index');
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('nao grava candidato duplicado mesmo que o indice seja submetido diretamente', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    Purchase::create([
+        'card_id' => $card->id,
+        'description' => 'Mercado Livre',
+        'merchant' => 'Mercado Livre',
+        'total_amount_cents' => 129_900,
+        'installments_count' => 10,
+        'purchased_at' => '2026-03-02',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'duplicate'));
+
+    // Data diferente da compra ja existente: o fingerprint de escrita (Important 3)
+    // nao pega essa duplicata sozinho, entao so o guard de isImportable() protege aqui.
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-04-15']],
+    ]);
+
+    expect(Purchase::count())->toBe(1);
+});
+
+it('nao grava compra em cartao de outro usuario mesmo com a sessao manipulada', function (): void {
+    $user = User::factory()->create();
+    $foreignCard = Card::factory()->for(User::factory())->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(['invoice_import' => [
+            'card_id' => $foreignCard->id,
+            'issuer' => 'Nubank',
+            'due_date' => '2026-05-10',
+            'candidates' => [[
+                'description' => 'MERCADOLIVRE*ABC',
+                'merchant' => 'Mercado Livre',
+                'total_amount_cents' => 129_900,
+                'installments_count' => 10,
+                'installment_number' => 3,
+                'installment_amount_cents' => 12_990,
+                'purchased_at' => '2026-03-02',
+                'status' => 'matched',
+            ]],
+        ]])
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertNotFound();
+
+    expect(Purchase::count())->toBe(0);
+});
+
+it('limpa a sessao apos confirmar e nao reimporta a mesma sessao', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertSessionMissing('invoice_import');
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), [
+            'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+        ])
+        ->assertRedirect(route('invoice-imports.create'));
+
+    expect(Purchase::count())->toBe(1);
+});
+
+it('nao duplica a compra quando a data editada na revisao repete uma importacao anterior', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-02-20']],
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'matched'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-02-20']],
+    ]);
+
+    expect(Purchase::count())->toBe(1);
+});

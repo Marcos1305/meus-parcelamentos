@@ -3,12 +3,12 @@
 namespace App\Invoices;
 
 use App\Models\Card;
-use App\Models\Purchase;
 
 class BuildInvoiceCandidates
 {
     public function __construct(
         private ReconcileInvoiceLine $reconcileInvoiceLine,
+        private PurchaseAlreadyExists $purchaseAlreadyExists,
     ) {}
 
     /**
@@ -37,12 +37,12 @@ class BuildInvoiceCandidates
      */
     private function markDuplicate(InvoiceCandidate $candidate, Card $card): InvoiceCandidate
     {
-        $exists = Purchase::query()
-            ->where('card_id', $card->id)
-            ->where('total_amount_cents', $candidate->totalAmountCents)
-            ->where('installments_count', $candidate->installmentsCount)
-            ->whereDate('purchased_at', $candidate->purchasedAt->toDateString())
-            ->exists();
+        $exists = $this->purchaseAlreadyExists->handle(
+            $card,
+            $candidate->totalAmountCents,
+            $candidate->installmentsCount,
+            $candidate->purchasedAt,
+        );
 
         if (! $exists) {
             return $candidate;

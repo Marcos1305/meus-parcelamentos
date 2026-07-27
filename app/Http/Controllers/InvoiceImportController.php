@@ -9,11 +9,13 @@ use App\Invoices\BuildInvoiceCandidates;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceCandidate;
 use App\Invoices\ParsedInvoice;
+use App\Invoices\PurchaseAlreadyExists;
 use App\Invoices\ResolveInvoiceParser;
 use App\Invoices\UnreadableInvoiceException;
 use App\Invoices\UnsupportedInvoiceException;
 use App\Models\Card;
 use App\Models\Purchase;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -110,6 +112,7 @@ class InvoiceImportController extends Controller
     public function confirm(
         ConfirmInvoiceImportRequest $request,
         GenerateInstallments $generateInstallments,
+        PurchaseAlreadyExists $purchaseAlreadyExists,
     ): RedirectResponse {
         $import = $request->session()->get('invoice_import');
 
@@ -124,11 +127,24 @@ class InvoiceImportController extends Controller
         /** @var array<int, array{index: int, purchased_at: string}> $lines */
         $lines = $request->validated('lines');
 
-        DB::transaction(function () use ($lines, $import, $card, $generateInstallments): void {
+        $imported = 0;
+
+        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, &$imported): void {
             foreach ($lines as $line) {
                 $candidate = InvoiceCandidate::fromArray($import['candidates'][$line['index']]);
 
                 if (! $candidate->status->isImportable()) {
+                    continue;
+                }
+
+                $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
+
+                if ($purchaseAlreadyExists->handle(
+                    $card,
+                    $candidate->totalAmountCents,
+                    $candidate->installmentsCount,
+                    $purchasedAt,
+                )) {
                     continue;
                 }
 
@@ -138,10 +154,12 @@ class InvoiceImportController extends Controller
                     'merchant' => $candidate->merchant,
                     'total_amount_cents' => $candidate->totalAmountCents,
                     'installments_count' => $candidate->installmentsCount,
-                    'purchased_at' => $line['purchased_at'],
+                    'purchased_at' => $purchasedAt,
                 ]);
 
                 $generateInstallments->handle($purchase->setRelation('card', $card));
+
+                $imported++;
             }
         });
 
@@ -149,7 +167,9 @@ class InvoiceImportController extends Controller
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => 'Importação concluída.',
+            'message' => $imported === 1
+                ? '1 compra importada.'
+                : "{$imported} compras importadas.",
         ]);
 
         return to_route('history.index');
