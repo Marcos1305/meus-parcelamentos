@@ -1,8 +1,10 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InvoiceImportController from '@/actions/App/Http/Controllers/InvoiceImportController';
+import AlertError from '@/components/alert-error';
 import { CandidateStatusChip } from '@/components/candidate-status-chip';
 import Heading from '@/components/heading';
+import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,16 +32,44 @@ export default function ReviewInvoice({
         candidates.map((candidate) => candidate.purchased_at),
     );
 
+    const [submittedOrder, setSubmittedOrder] = useState<number[]>([]);
+
     const form = useForm({});
 
-    const submit = () => {
-        form.transform(() => ({
-            lines: candidates
-                .map((_, index) => ({ index, purchased_at: dates[index] }))
-                .filter((_, index) => selected[index]),
-        }));
+    /**
+     * As chaves de erro chegam como `lines.0.purchased_at`, indexadas pela
+     * posição no payload, não pelo índice do candidato.
+     */
+    const errors = form.errors as Record<string, string | undefined>;
+    const errorMessages = Object.values(errors).filter(
+        (message): message is string => typeof message === 'string',
+    );
 
-        form.post(InvoiceImportController.confirm.url());
+    const errorForCandidate = (index: number): string | undefined => {
+        const position = submittedOrder.indexOf(index);
+
+        if (position === -1) {
+            return undefined;
+        }
+
+        return (
+            errors[`lines.${position}.purchased_at`] ??
+            errors[`lines.${position}.index`]
+        );
+    };
+
+    const submit = () => {
+        const lines = candidates
+            .map((_, index) => ({ index, purchased_at: dates[index] }))
+            .filter((_, index) => selected[index]);
+
+        setSubmittedOrder(lines.map((line) => line.index));
+
+        form.transform(() => ({ lines }));
+
+        form.post(InvoiceImportController.confirm.url(), {
+            preserveScroll: true,
+        });
     };
 
     const selectedCount = selected.filter(Boolean).length;
@@ -53,6 +83,13 @@ export default function ReviewInvoice({
                     title="Revisar importação"
                     description={`${issuer} · vencimento ${formatDate(due_date)} · ${card.name} •••• ${card.last_four_digits}`}
                 />
+
+                {errorMessages.length > 0 && (
+                    <AlertError
+                        errors={errorMessages}
+                        title="Não foi possível concluir a importação."
+                    />
+                )}
 
                 <Card>
                     <CardContent className="overflow-x-auto p-0">
@@ -126,6 +163,12 @@ export default function ReviewInvoice({
                                                         ),
                                                     )
                                                 }
+                                            />
+                                            <InputError
+                                                className="mt-1"
+                                                message={errorForCandidate(
+                                                    index,
+                                                )}
                                             />
                                         </td>
                                         <td className="p-3">

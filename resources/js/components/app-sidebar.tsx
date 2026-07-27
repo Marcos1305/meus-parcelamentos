@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
     CreditCard,
@@ -45,12 +45,13 @@ const mainNavItems: NavItem[] = [
         href: history.index(),
         icon: HistoryIcon,
     },
-    {
-        title: 'Importar fatura',
-        href: InvoiceImportController.create(),
-        icon: FileUp,
-    },
 ];
+
+const invoiceImportNavItem: NavItem = {
+    title: 'Importar fatura',
+    href: InvoiceImportController.create(),
+    icon: FileUp,
+};
 
 const footerNavItems: NavItem[] = [
     {
@@ -66,6 +67,12 @@ const footerNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { invoiceImportAvailable } = usePage().props;
+
+    const navItems = invoiceImportAvailable
+        ? [...mainNavItems, invoiceImportNavItem]
+        : mainNavItems;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -81,7 +88,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={navItems} />
 
                 <div className="px-2 pt-2">
                     <Button asChild className="w-full">

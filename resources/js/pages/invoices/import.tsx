@@ -14,9 +14,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import type { CardOption } from '@/types';
+import type { InvoiceCardOption } from '@/types';
 
-export default function ImportInvoice({ cards }: { cards: CardOption[] }) {
+export default function ImportInvoice({
+    cards,
+}: {
+    cards: InvoiceCardOption[];
+}) {
     const [cardId, setCardId] = useState('');
 
     return (

@@ -29,6 +29,11 @@ export type CardOption = {
     due_day: number;
 };
 
+export type InvoiceCardOption = Pick<
+    CardOption,
+    'id' | 'name' | 'last_four_digits'
+>;
+
 export type FeaturedPurchase = {
     description: string;
     merchant: string | null;
