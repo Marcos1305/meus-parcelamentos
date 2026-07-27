@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Invoices\ExtractsInvoiceText;
+use App\Invoices\PopplerTextExtractor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +17,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(
+            ExtractsInvoiceText::class,
+            PopplerTextExtractor::class,
+        );
     }
 
     /**
