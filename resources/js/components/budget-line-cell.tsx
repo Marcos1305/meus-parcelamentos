@@ -4,7 +4,13 @@ import { useState } from 'react';
 import planRoute from '@/routes/plan';
 import type { PlanLineRow } from '@/types';
 
-export function BudgetLineCell({ line }: { line: PlanLineRow }) {
+type BudgetLineCellProps = {
+    line: PlanLineRow;
+    isFirst: boolean;
+    isLast: boolean;
+};
+
+export function BudgetLineCell({ line, isFirst, isLast }: BudgetLineCellProps) {
     const [name, setName] = useState(line.name);
 
     function patch(changes: Partial<Pick<PlanLineRow, 'name' | 'position'>>) {
@@ -46,7 +52,8 @@ export function BudgetLineCell({ line }: { line: PlanLineRow }) {
             <button
                 type="button"
                 onClick={() => patch({ position: line.position - 1 })}
-                className="text-muted-foreground hover:text-foreground"
+                disabled={isFirst}
+                className="text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                 aria-label={`Subir ${line.name}`}
             >
                 <ChevronUp className="size-4" />
@@ -54,7 +61,8 @@ export function BudgetLineCell({ line }: { line: PlanLineRow }) {
             <button
                 type="button"
                 onClick={() => patch({ position: line.position + 1 })}
-                className="text-muted-foreground hover:text-foreground"
+                disabled={isLast}
+                className="text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                 aria-label={`Descer ${line.name}`}
             >
                 <ChevronDown className="size-4" />

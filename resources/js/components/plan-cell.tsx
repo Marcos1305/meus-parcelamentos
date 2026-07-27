@@ -8,9 +8,16 @@ type PlanCellProps = {
     valueCents: number;
     isExplicit: boolean;
     hint: string | null;
+    label: string;
 };
 
-export function PlanCell({ url, valueCents, isExplicit, hint }: PlanCellProps) {
+export function PlanCell({
+    url,
+    valueCents,
+    isExplicit,
+    hint,
+    label,
+}: PlanCellProps) {
     const [draft, setDraft] = useState(() => formatBRL(valueCents));
 
     function commit() {
@@ -52,7 +59,7 @@ export function PlanCell({ url, valueCents, isExplicit, hint }: PlanCellProps) {
                 onChange={(event) => setDraft(event.target.value)}
                 onBlur={commit}
                 inputMode="numeric"
-                aria-label={hint ?? undefined}
+                aria-label={label}
                 className={cn(
                     'w-full bg-transparent px-3 py-2 text-right text-sm tabular-nums outline-none focus:bg-accent',
                     isExplicit ? 'text-foreground' : 'text-muted-foreground',

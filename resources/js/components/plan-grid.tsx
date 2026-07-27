@@ -18,10 +18,24 @@ const MONTH_LABEL = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'UTC',
 });
 
+const MONTH_FULL_LABEL = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+});
+
 function monthHeader(month: string): string {
     return MONTH_LABEL.format(new Date(`${month}-01T00:00:00Z`))
         .replace('.', '')
         .toUpperCase();
+}
+
+function monthFullLabel(month: string): string {
+    return MONTH_FULL_LABEL.format(new Date(`${month}-01T00:00:00Z`));
+}
+
+function cellLabel(name: string, month: string): string {
+    return `${name}, ${monthFullLabel(month)}`;
 }
 
 const HEAD_CELL =
@@ -53,10 +67,14 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                 </thead>
 
                 <tbody className="divide-y">
-                    {incomeLines.map((line) => (
+                    {incomeLines.map((line, index) => (
                         <tr key={line.id}>
                             <td className={STICKY}>
-                                <BudgetLineCell line={line} />
+                                <BudgetLineCell
+                                    line={line}
+                                    isFirst={index === 0}
+                                    isLast={index === incomeLines.length - 1}
+                                />
                             </td>
                             {plan.months.map((month) => (
                                 <PlanCell
@@ -69,6 +87,7 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                                         line.months[month].amount_cents !== null
                                     }
                                     hint={null}
+                                    label={cellLabel(line.name, month)}
                                 />
                             ))}
                         </tr>
@@ -108,15 +127,23 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                                                       .computed_cents,
                                               )}`
                                     }
+                                    label={cellLabel(
+                                        `${card.name} ${card.last_four_digits}`,
+                                        month,
+                                    )}
                                 />
                             ))}
                         </tr>
                     ))}
 
-                    {expenseLines.map((line) => (
+                    {expenseLines.map((line, index) => (
                         <tr key={line.id}>
                             <td className={STICKY}>
-                                <BudgetLineCell line={line} />
+                                <BudgetLineCell
+                                    line={line}
+                                    isFirst={index === 0}
+                                    isLast={index === expenseLines.length - 1}
+                                />
                             </td>
                             {plan.months.map((month) => (
                                 <PlanCell
@@ -129,6 +156,7 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                                         line.months[month].amount_cents !== null
                                     }
                                     hint={null}
+                                    label={cellLabel(line.name, month)}
                                 />
                             ))}
                         </tr>
