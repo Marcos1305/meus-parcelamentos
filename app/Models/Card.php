@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property-read User $user
  * @property-read Collection<int, Purchase> $purchases
  * @property-read Collection<int, Installment> $installments
+ * @property-read Collection<int, CardMonthAmount> $monthAmounts
  */
 #[Fillable(['name', 'brand', 'label', 'last_four_digits', 'credit_limit_cents', 'closing_day', 'due_day'])]
 class Card extends Model
@@ -51,6 +52,12 @@ class Card extends Model
     public function installments(): HasManyThrough
     {
         return $this->hasManyThrough(Installment::class, Purchase::class);
+    }
+
+    /** @return HasMany<CardMonthAmount, $this> */
+    public function monthAmounts(): HasMany
+    {
+        return $this->hasMany(CardMonthAmount::class);
     }
 
     /**
