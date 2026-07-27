@@ -72,6 +72,18 @@ it('soma as parcelas do mes no valor calculado do cartao', function (): void {
         ->and($plan['cards'][0]['months']['2026-10']['computed_cents'])->toBe(900_00);
 });
 
+it('inclui parcela que vence no primeiro e no ultimo dia do ano', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+    parcelaNoCartao($card, '2026-01-01', 150_00);
+    parcelaNoCartao($card, '2026-12-31', 275_00);
+
+    $plan = planFor($user);
+
+    expect($plan['cards'][0]['months']['2026-01']['computed_cents'])->toBe(150_00)
+        ->and($plan['cards'][0]['months']['2026-12']['computed_cents'])->toBe(275_00);
+});
+
 it('conta parcela ja vencida do mes passado', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create();
@@ -100,6 +112,15 @@ it('correcao de zero vale zero, nao volta para o calculado', function (): void {
     CardMonthAmount::factory()->for($card)->create(['month' => '2026-09-01', 'amount_cents' => 0]);
 
     expect(planFor($user)['cards'][0]['months']['2026-09']['effective_cents'])->toBe(0);
+});
+
+it('correcao de zero em linha de orcamento vale zero, nao volta para o padrao', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->expense()->create(['default_amount_cents' => 400_00]);
+    BudgetLineAmount::factory()->for($line)->create(['month' => '2026-05-01', 'amount_cents' => 0]);
+
+    expect(planFor($user)['lines'][0]['months']['2026-05'])
+        ->toBe(['amount_cents' => 0, 'effective_cents' => 0]);
 });
 
 it('soma entrada, saida e saldo', function (): void {

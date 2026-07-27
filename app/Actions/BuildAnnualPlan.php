@@ -101,7 +101,8 @@ class BuildAnnualPlan
         $rows = DB::table('installments')
             ->join('purchases', 'purchases.id', '=', 'installments.purchase_id')
             ->whereIn('purchases.card_id', $cardIds)
-            ->whereBetween('installments.due_date', ["{$year}-01-01", "{$year}-12-31"])
+            ->whereDate('installments.due_date', '>=', "{$year}-01-01")
+            ->whereDate('installments.due_date', '<=', "{$year}-12-31")
             ->get([
                 'purchases.card_id as card_id',
                 'installments.due_date as due_date',
@@ -132,7 +133,8 @@ class BuildAnnualPlan
 
         $rows = DB::table('card_month_amounts')
             ->whereIn('card_id', $cardIds)
-            ->whereBetween('month', ["{$year}-01-01", "{$year}-12-31"])
+            ->whereDate('month', '>=', "{$year}-01-01")
+            ->whereDate('month', '<=', "{$year}-12-31")
             ->get(['card_id', 'month', 'amount_cents']);
 
         $overrides = [];
@@ -189,7 +191,8 @@ class BuildAnnualPlan
 
         $rows = DB::table('budget_line_amounts')
             ->whereIn('budget_line_id', $lineIds)
-            ->whereBetween('month', ["{$year}-01-01", "{$year}-12-31"])
+            ->whereDate('month', '>=', "{$year}-01-01")
+            ->whereDate('month', '<=', "{$year}-12-31")
             ->get(['budget_line_id', 'month', 'amount_cents']);
 
         $amounts = [];
