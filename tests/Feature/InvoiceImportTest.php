@@ -1,11 +1,17 @@
 <?php
 
+use App\Actions\GenerateInstallments;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceParser;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
+use App\Invoices\Parsers\ItauInvoiceParser;
+use App\Invoices\Parsers\MercadoPagoInvoiceParser;
+use App\Invoices\Parsers\NubankInvoiceParser;
+use App\Invoices\Parsers\RennerInvoiceParser;
 use App\Invoices\ResolveInvoiceParser;
 use App\Models\Card;
+use App\Models\Installment;
 use App\Models\Purchase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -68,6 +74,24 @@ function fakeParserFor(ParsedInvoice $invoice): void
 function noParsersRegistered(): void
 {
     app()->bind(ResolveInvoiceParser::class, fn (): ResolveInvoiceParser => new ResolveInvoiceParser([]));
+}
+
+/**
+ * Uma compra ja no historico, gravada com o cronograma de parcelas como fazem
+ * os dois caminhos de escrita do app.
+ */
+function importedPurchase(Card $card, string $purchasedAt): void
+{
+    $purchase = Purchase::create([
+        'card_id' => $card->id,
+        'description' => 'Mercado Livre',
+        'merchant' => 'Mercado Livre',
+        'total_amount_cents' => 129_900,
+        'installments_count' => 10,
+        'purchased_at' => $purchasedAt,
+    ]);
+
+    app(GenerateInstallments::class)->handle($purchase->load('card'));
 }
 
 function invoiceWithOneLine(string $lastFour = '8291'): ParsedInvoice
@@ -293,6 +317,53 @@ it('exige autenticacao', function (): void {
     $this->get(route('invoice-imports.create'))->assertRedirect(route('login'));
 });
 
+/**
+ * Sem fake de parser: cada emissor suportado precisa continuar registrado no
+ * container. Quem sair da lista para de reconhecer a fatura que atende, e a
+ * importacao passa a recusar esse emissor em producao.
+ */
+it('reconhece a fatura de cada emissor com os parsers registrados', function (string $fixture, string $parser): void {
+    $text = file_get_contents(base_path("tests/Fixtures/faturas/{$fixture}"));
+
+    expect(app(ResolveInvoiceParser::class)->handle($text))->toBeInstanceOf($parser);
+})->with([
+    'nubank' => ['nubank.txt', NubankInvoiceParser::class],
+    'mercado pago' => ['mercado-pago.txt', MercadoPagoInvoiceParser::class],
+    'itau' => ['itau.txt', ItauInvoiceParser::class],
+    'renner' => ['renner.txt', RennerInvoiceParser::class],
+]);
+
+/**
+ * O unico teste que atravessa parser e controller com o texto de uma fatura
+ * real: so o extrator e falso, o resto e a montagem de producao.
+ */
+it('leva a fatura de cada emissor do upload ate a revisao', function (string $fixture, string $issuer, int $candidatos): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create(['closing_day' => 5, 'due_day' => 9]);
+
+    fakeExtractorReturning(file_get_contents(base_path("tests/Fixtures/faturas/{$fixture}")));
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.store'), [
+            'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+            'card_id' => $card->id,
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('invoice-imports.review'));
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('issuer', $issuer)
+            ->has('candidates', $candidatos));
+})->with([
+    'nubank' => ['nubank.txt', 'Nubank', 20],
+    'mercado pago' => ['mercado-pago.txt', 'Mercado Pago', 22],
+    'itau' => ['itau.txt', 'Itaú', 19],
+    'renner' => ['renner.txt', 'Renner', 15],
+]);
+
 it('confirma a importacao e grava as compras com as parcelas', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create([
@@ -374,6 +445,69 @@ it('nao importa duas vezes a mesma fatura', function (): void {
         ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'duplicate'));
 });
 
+/**
+ * O Nubank carimba a parcela 1 com o dia real da compra e as parcelas
+ * seguintes com o dia de abertura do ciclo, entao a mesma compra chega com dia
+ * diferente em cada fatura e resolve para datas de compra diferentes. Importar
+ * duas faturas consecutivas nao pode gravar a compra duas vezes: seria o
+ * historico inteiro dobrando de tamanho a cada mes.
+ */
+it('nao reimporta a compra que a fatura seguinte mostra na parcela seguinte', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 5,
+        'due_day' => 9,
+        'last_four_digits' => '8291',
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-07-09'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 7, 1, 2, 50_000)],
+    ));
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page
+            ->where('candidates.0.status', 'matched')
+            ->where('candidates.0.purchased_at', '2026-06-07'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-06-07']],
+    ]);
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-08-09'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('MERCADO LIVRE', 'Mercado Livre', 2, 2, 2, 50_000)],
+    ));
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page
+            ->where('candidates.0.purchased_at', '2026-07-02')
+            ->where('candidates.0.status', 'duplicate'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-07-02']],
+    ]);
+
+    expect(Purchase::count())->toBe(1)
+        ->and(Installment::count())->toBe(2);
+});
+
 it('recusa confirmacao sem sessao de importacao', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create();
@@ -442,14 +576,7 @@ it('nao grava candidato duplicado mesmo que o indice seja submetido diretamente'
         'last_four_digits' => '8291',
     ]);
 
-    Purchase::create([
-        'card_id' => $card->id,
-        'description' => 'Mercado Livre',
-        'merchant' => 'Mercado Livre',
-        'total_amount_cents' => 129_900,
-        'installments_count' => 10,
-        'purchased_at' => '2026-03-02',
-    ]);
+    importedPurchase($card, '2026-03-02');
 
     fakeExtractorReturning('texto qualquer');
     fakeParserFor(invoiceWithOneLine());
@@ -562,10 +689,43 @@ it('nao duplica a compra quando a data editada na revisao repete uma importacao 
 
     $this->actingAs($user)
         ->get(route('invoice-imports.review'))
-        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'matched'));
+        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'duplicate'));
 
     $this->actingAs($user)->post(route('invoice-imports.confirm'), [
         'lines' => [['index' => 0, 'purchased_at' => '2026-02-20']],
+    ]);
+
+    expect(Purchase::count())->toBe(1);
+});
+
+/**
+ * A revisao nao viu duplicata porque a compra do historico venceu em outro mes
+ * que o inferido. Quem corrige a data para a da compra ja importada so colide
+ * com ela na gravacao, e e la que a segunda copia precisa ser recusada.
+ */
+it('nao grava a compra quando a data corrigida na revisao cai no cronograma de uma ja importada', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    importedPurchase($card, '2026-04-02');
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor(invoiceWithOneLine());
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('invoice-imports.review'))
+        ->assertInertia(fn ($page) => $page->where('candidates.0.status', 'matched'));
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-04-02']],
     ]);
 
     expect(Purchase::count())->toBe(1);
@@ -701,14 +861,7 @@ it('avisa quando nenhuma das compras marcadas foi importada', function (): void 
         'last_four_digits' => '8291',
     ]);
 
-    Purchase::create([
-        'card_id' => $card->id,
-        'description' => 'Mercado Livre',
-        'merchant' => 'Mercado Livre',
-        'total_amount_cents' => 129_900,
-        'installments_count' => 10,
-        'purchased_at' => '2026-03-02',
-    ]);
+    importedPurchase($card, '2026-03-02');
 
     fakeExtractorReturning('texto qualquer');
     fakeParserFor(invoiceWithOneLine());

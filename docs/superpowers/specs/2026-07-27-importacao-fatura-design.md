@@ -88,7 +88,9 @@ O pipeline existente é usado como *verificador*, não só como gerador. Quando 
 
 **Passo 3 — deduplicação:**
 
-Impressão digital: `card_id + total_amount_cents + installments_count + purchased_at`. A mesma compra aparece em faturas consecutivas como `3/10` e depois `4/10`, mas ambas resolvem para o mesmo `purchased_at` e o mesmo total. A segunda vira `duplicate` e vem desmarcada.
+Impressão digital: `card_id + total_amount_cents + installments_count + vencimento da parcela nº 1`. A mesma compra aparece em faturas consecutivas como `3/10` e depois `4/10`, e o vencimento da primeira parcela é o que as duas leituras têm em comum: ele sai do mês de vencimento da fatura recuado pelo número da parcela, conta que dá o mesmo mês em qualquer fatura da compra, com o dia vindo do vencimento do cartão. A segunda vira `duplicate` e vem desmarcada.
+
+A `purchased_at` não serve de âncora: o Nubank carimba a parcela 1 com o dia real da compra e as parcelas seguintes com o dia de abertura do ciclo, então a mesma compra resolve para datas de compra diferentes conforme a fatura em que aparece. O vencimento da primeira parcela também não depende do dia de fechamento, então a deduplicação continua funcionando para quem cadastrou esse dia errado.
 
 A descrição fica fora da impressão digital de propósito: o texto do estabelecimento varia entre faturas (`MERCADOLIVRE*ABC` vs `MERCADO LIVRE`) e mataria a deduplicação.
 

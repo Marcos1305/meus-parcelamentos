@@ -75,6 +75,32 @@ it('calcula o total como valor da parcela vezes a quantidade', function (): void
 });
 
 /**
+ * A mesma compra em faturas consecutivas: o Nubank carimba a parcela 1 com o
+ * dia real da compra e a parcela 2 com o dia de abertura do ciclo, entao as
+ * duas linhas resolvem para datas de compra diferentes. O vencimento da
+ * primeira parcela e o que as duas leituras tem em comum.
+ */
+it('resolve o mesmo vencimento de primeira parcela nas duas faturas em que a compra aparece', function (): void {
+    $julho = reconciler()->handle(invoiceLine(1, 2, 7), CarbonImmutable::parse('2026-07-09'), 5, 9);
+    $agosto = reconciler()->handle(invoiceLine(2, 2, 2), CarbonImmutable::parse('2026-08-09'), 5, 9);
+
+    expect($julho->purchasedAt->toDateString())->toBe('2026-06-07')
+        ->and($agosto->purchasedAt->toDateString())->toBe('2026-07-02')
+        ->and($julho->firstDueDate->toDateString())->toBe('2026-07-09')
+        ->and($agosto->firstDueDate->toDateString())->toBe('2026-07-09');
+});
+
+it('resolve o vencimento da primeira parcela sem depender do dia de fechamento', function (): void {
+    $fechamentoNoDiaUm = reconciler()->handle(invoiceLine(3, 10, 2), CarbonImmutable::parse('2026-05-10'), 1, 10);
+    $fechamentoNoDiaTres = reconciler()->handle(invoiceLine(3, 10, 2), CarbonImmutable::parse('2026-05-10'), 3, 10);
+
+    expect($fechamentoNoDiaUm->purchasedAt->toDateString())->toBe('2026-02-02')
+        ->and($fechamentoNoDiaTres->purchasedAt->toDateString())->toBe('2026-03-02')
+        ->and($fechamentoNoDiaUm->firstDueDate->toDateString())->toBe('2026-03-10')
+        ->and($fechamentoNoDiaTres->firstDueDate->toDateString())->toBe('2026-03-10');
+});
+
+/**
  * Dia 31 cai em fevereiro depois da inversao e e truncado para 28, o que
  * antecipa o fechamento e joga a parcela para marco em vez de abril.
  */

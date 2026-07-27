@@ -129,5 +129,6 @@ export type InvoiceCandidate = {
     installment_number: number;
     installment_amount_cents: number;
     purchased_at: string;
+    first_due_date: string;
     status: CandidateStatus;
 };

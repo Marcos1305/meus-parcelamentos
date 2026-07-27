@@ -35,7 +35,7 @@ class BuildInvoiceCandidates
                 $card,
                 $candidate->totalAmountCents,
                 $candidate->installmentsCount,
-                $candidate->purchasedAt,
+                $candidate->firstDueDate,
             );
 
             $candidates[] = $isDuplicate ? $this->asDuplicate($candidate) : $candidate;
@@ -59,6 +59,7 @@ class BuildInvoiceCandidates
             installmentNumber: $candidate->installmentNumber,
             installmentAmountCents: $candidate->installmentAmountCents,
             purchasedAt: $candidate->purchasedAt,
+            firstDueDate: $candidate->firstDueDate,
             status: CandidateStatus::Duplicate,
         );
     }

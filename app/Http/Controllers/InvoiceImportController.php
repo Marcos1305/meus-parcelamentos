@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\CalculateFirstDueDate;
 use App\Actions\GenerateInstallments;
 use App\Http\Requests\AnalyzeInvoiceRequest;
 use App\Http\Requests\ConfirmInvoiceImportRequest;
@@ -125,6 +126,7 @@ class InvoiceImportController extends Controller
         ConfirmInvoiceImportRequest $request,
         GenerateInstallments $generateInstallments,
         PurchaseAlreadyExists $purchaseAlreadyExists,
+        CalculateFirstDueDate $calculateFirstDueDate,
     ): RedirectResponse {
         $import = $this->importFromSession($request);
 
@@ -146,12 +148,13 @@ class InvoiceImportController extends Controller
 
         $imported = 0;
 
-        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, &$imported): void {
+        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, $calculateFirstDueDate, &$imported): void {
             $alreadyInHistory = $this->fingerprintsAlreadyInHistory(
                 $lines,
                 $import['candidates'],
                 $card,
                 $purchaseAlreadyExists,
+                $calculateFirstDueDate,
             );
 
             foreach ($lines as $line) {
@@ -162,8 +165,9 @@ class InvoiceImportController extends Controller
                 }
 
                 $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
+                $firstDueDate = $this->firstDueDateFor($calculateFirstDueDate, $card, $purchasedAt);
 
-                if ($alreadyInHistory[$this->fingerprint($candidate, $purchasedAt)] ?? false) {
+                if ($alreadyInHistory[$this->fingerprint($candidate, $firstDueDate)] ?? false) {
                     continue;
                 }
 
@@ -197,8 +201,9 @@ class InvoiceImportController extends Controller
      * descartada por causa da primeira. A resposta e colhida aqui, contra o
      * estado anterior a qualquer escrita do lote.
      *
-     * A assinatura usa a data final vinda da revisao, nao a inferida, porque e
-     * ela que sera persistida.
+     * A assinatura usa o cronograma da data final vinda da revisao, nao o
+     * inferido, porque e a data final que sera persistida e e dela que as
+     * parcelas gravadas nascem.
      *
      * @param  array<int, array{index: int, purchased_at: string}>  $lines
      * @param  non-empty-array<int, array<string, mixed>>  $candidates
@@ -209,13 +214,15 @@ class InvoiceImportController extends Controller
         array $candidates,
         Card $card,
         PurchaseAlreadyExists $purchaseAlreadyExists,
+        CalculateFirstDueDate $calculateFirstDueDate,
     ): array {
         $existing = [];
 
         foreach ($lines as $line) {
             $candidate = InvoiceCandidate::fromArray($candidates[$line['index']]);
             $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
-            $fingerprint = $this->fingerprint($candidate, $purchasedAt);
+            $firstDueDate = $this->firstDueDateFor($calculateFirstDueDate, $card, $purchasedAt);
+            $fingerprint = $this->fingerprint($candidate, $firstDueDate);
 
             if (array_key_exists($fingerprint, $existing)) {
                 continue;
@@ -225,7 +232,7 @@ class InvoiceImportController extends Controller
                 $card,
                 $candidate->totalAmountCents,
                 $candidate->installmentsCount,
-                $purchasedAt,
+                $firstDueDate,
             );
         }
 
@@ -233,15 +240,29 @@ class InvoiceImportController extends Controller
     }
 
     /**
+     * O vencimento da primeira parcela que a compra tera depois de gravada:
+     * GenerateInstallments monta o cronograma a partir da data confirmada, e a
+     * deteccao de duplicata precisa perguntar pelo mesmo cronograma que a
+     * escrita vai produzir.
+     */
+    private function firstDueDateFor(
+        CalculateFirstDueDate $calculateFirstDueDate,
+        Card $card,
+        CarbonImmutable $purchasedAt,
+    ): CarbonImmutable {
+        return $calculateFirstDueDate->handle($purchasedAt, $card->closing_day, $card->due_day);
+    }
+
+    /**
      * Chave local do mapa de compras preexistentes. O cartao fica de fora
      * porque uma confirmacao inteira grava num unico cartao.
      */
-    private function fingerprint(InvoiceCandidate $candidate, CarbonImmutable $purchasedAt): string
+    private function fingerprint(InvoiceCandidate $candidate, CarbonImmutable $firstDueDate): string
     {
         return implode('|', [
             $candidate->totalAmountCents,
             $candidate->installmentsCount,
-            $purchasedAt->toDateString(),
+            $firstDueDate->toDateString(),
         ]);
     }
 

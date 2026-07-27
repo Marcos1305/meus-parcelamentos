@@ -42,6 +42,7 @@ class ReconcileInvoiceLine
             installmentNumber: $line->installmentNumber,
             installmentAmountCents: $line->amountCents,
             purchasedAt: $purchasedAt,
+            firstDueDate: $schedule[0]['due_date'],
             status: $reprocessed->isSameMonth($invoiceDueDate, true)
                 ? CandidateStatus::Matched
                 : CandidateStatus::Divergent,
