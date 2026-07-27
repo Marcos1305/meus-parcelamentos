@@ -25,9 +25,9 @@ function fakeParser(string $needle): InvoiceParser
 }
 
 it('escolhe o primeiro parser que reconhece o texto', function (): void {
-    $resolve = new ResolveInvoiceParser([fakeParser('nubank'), fakeParser('itau')]);
+    $resolve = new ResolveInvoiceParser([fakeParser('itau'), fakeParser('nubank')]);
 
-    expect($resolve->handle('fatura itau de maio')->parse('')->issuer)->toBe('itau');
+    expect($resolve->handle('fatura itau e nubank juntas')->parse('')->issuer)->toBe('itau');
 });
 
 it('recusa texto que nenhum parser reconhece', function (): void {
