@@ -222,3 +222,70 @@ it('nao arquiva linha de outro usuario', function (): void {
         ->delete(route('plan.lines.destroy', $alheia->id))
         ->assertNotFound();
 });
+
+it('a seta para cima troca com a despesa vizinha mesmo com renda intercalada', function (): void {
+    $user = User::factory()->create();
+    // Renda criada primeiro (id menor) com a mesma posicao da primeira
+    // despesa: a sequencia de position nao e mais global, entao tipos
+    // diferentes podem repetir numero sem colidir. Se o reposition ainda
+    // olhasse todos os tipos, essa renda entraria na contagem do indice e
+    // a despesa do fim pularia direto para o topo em vez de so trocar com
+    // a vizinha imediata.
+    BudgetLine::factory()->for($user)->income()->create(['name' => 'Salario', 'position' => 0]);
+    $despesaA = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Agua', 'position' => 0]);
+    $despesaB = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Aluguel', 'position' => 1]);
+    $despesaC = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Internet', 'position' => 2]);
+
+    $this->actingAs($user)->patch(route('plan.lines.update', $despesaC->id), [
+        'name' => $despesaC->name,
+        'default_amount_cents' => $despesaC->default_amount_cents,
+        'position' => 1,
+    ]);
+
+    expect($despesaA->fresh()->position)->toBe(0)
+        ->and($despesaC->fresh()->position)->toBe(1)
+        ->and($despesaB->fresh()->position)->toBe(2);
+});
+
+it('linha arquivada no meio nao impede a troca entre duas ativas do mesmo tipo', function (): void {
+    $user = User::factory()->create();
+    // Arquivada criada primeiro (id menor) com a mesma posicao da primeira
+    // ativa: se o reposition ainda contasse linhas arquivadas, ela entraria
+    // no indice no lugar da vizinha ativa e a linha movida pularia direto
+    // para o topo em vez de so trocar com quem esta logo acima.
+    BudgetLine::factory()->for($user)->expense()->archived()->create(['name' => 'Academia', 'position' => 0]);
+    $ativaA = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Agua', 'position' => 0]);
+    $ativaB = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Aluguel', 'position' => 1]);
+    $ativaC = BudgetLine::factory()->for($user)->expense()->create(['name' => 'Internet', 'position' => 2]);
+
+    $this->actingAs($user)->patch(route('plan.lines.update', $ativaC->id), [
+        'name' => $ativaC->name,
+        'default_amount_cents' => $ativaC->default_amount_cents,
+        'position' => 1,
+    ]);
+
+    expect($ativaA->fresh()->position)->toBe(0)
+        ->and($ativaC->fresh()->position)->toBe(1)
+        ->and($ativaB->fresh()->position)->toBe(2);
+});
+
+it('cria renda e despesa no fim da fila do proprio tipo', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->income()->create(['position' => 3]);
+    BudgetLine::factory()->for($user)->expense()->create(['position' => 7]);
+
+    $this->actingAs($user)->post(route('plan.lines.store'), [
+        'kind' => 'income',
+        'name' => 'Freelance',
+        'default_amount_cents' => 50_00,
+    ]);
+
+    $this->actingAs($user)->post(route('plan.lines.store'), [
+        'kind' => 'expense',
+        'name' => 'Streaming',
+        'default_amount_cents' => 30_00,
+    ]);
+
+    expect(BudgetLine::query()->where('name', 'Freelance')->value('position'))->toBe(4)
+        ->and(BudgetLine::query()->where('name', 'Streaming')->value('position'))->toBe(8);
+});
