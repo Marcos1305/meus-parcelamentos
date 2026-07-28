@@ -374,7 +374,21 @@ it('nao le a vista das proximas faturas', function (): void {
 
     expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
 });
+
+it('descarta uma compra a vista com valor negativo', function (): void {
+    $negative = "26/03/2026    Compra a Vista                       ESTORNO DE COMPRA                                        -50,00";
+
+    $text = str_replace(
+        'Compras parceladas | Próximas faturas:',
+        $negative."\nCompras parceladas | Próximas faturas:",
+        rennerFixture(),
+    );
+
+    expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
+});
 ```
+
+> A linha negativa é inserida **antes** do marcador de propósito. Acrescentá-la ao fim do texto a colocaria depois do corte, e o teste passaria porque a linha foi cortada — não porque o sinal foi reconhecido.
 
 > O marcador `Compras parceladas | Próximas faturas:` fica no meio da fixture, então a linha acrescentada no fim cai depois dele. Sem o corte a contagem iria a 22; com o corte fica em 21. A fixture, sozinha, não prova nada sobre o corte: ela não tem nenhuma linha à vista depois do marcador, e um teste que apenas a comparasse consigo mesma passaria de qualquer jeito.
 
@@ -485,7 +499,15 @@ it('ignora o pagamento da fatura anterior', function (): void {
         expect($description)->not->toStartWith('pagamento');
     }
 });
+
+it('descarta uma compra a vista com valor negativo', function (): void {
+    $text = mercadoPagoFixture()."\n15/06      ESTORNO DE COMPRA                                        -R\$ 50,00\n";
+
+    expect((new MercadoPagoInvoiceParser)->parse($text)->cashLines)->toHaveCount(54);
+});
 ```
+
+> O segundo teste prova o filtro por texto (o pagamento da fatura vem com valor positivo e só a descrição o denuncia); o terceiro prova o filtro por sinal. São dois caminhos de exclusão diferentes e um não cobre o outro.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
