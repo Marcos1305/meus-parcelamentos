@@ -50,10 +50,12 @@ class ItauInvoiceParser implements InvoiceParser
      * O layout tem duas colunas por linha de texto, entao uma linha pode
      * conter pagamento a esquerda e compra a direita: dai o preg_match_all.
      *
-     * O padrao nao consegue, sozinho, distinguir compra avulsa de parcelada —
-     * a descricao e preguicosa e pararia antes do "N/M", deixando-o de fora e
-     * fazendo a parcela passar por compra a vista. O sufixo e testado depois,
-     * contra a descricao ja capturada.
+     * O padrao nao consegue, sozinho, distinguir compra avulsa de parcelada.
+     * A descricao de uma linha parcelada sai capturada com o "N/M" dentro
+     * dela: entre o nome do estabelecimento e o marcador ha um espaco so, e a
+     * descricao preguicosa so pode parar diante de dois ou mais espacos
+     * seguidos do valor. Por isso o sufixo e testado depois, contra a
+     * descricao ja capturada, em vez de dentro do padrao.
      */
     private const CASH_LINE_PATTERN = '/(?<!\d)(\d{2})\/(\d{2}) {2,}(\S.*?) {2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/u';
 

@@ -159,7 +159,7 @@ it('extrai as compras a vista', function (): void {
 
     foreach ($cashLines as $line) {
         expect($line->amountCents)->toBeGreaterThan(0)
-            ->and($line->description)->not->toMatch('/ \d{1,2}\/\d{1,2}$/');
+            ->and($line->description)->not->toMatch('/ \d{1,2}\/\d{1,2}$/u');
     }
 });
 
