@@ -2,6 +2,7 @@
 
 use App\Enums\BudgetLineKind;
 use App\Models\BudgetLine;
+use App\Models\HiddenPlanMonth;
 use App\Models\User;
 
 beforeEach(function (): void {
@@ -73,4 +74,15 @@ it('reaproveita a linha de entrada que ja existe em vez de criar outra', functio
 
     expect(BudgetLine::query()->where('user_id', $user->id)->count())->toBe(1)
         ->and($existente->fresh()->name)->toBe('Salario');
+});
+
+it('entrega os meses escondidos do ano pedido', function (): void {
+    $user = User::factory()->create();
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2026-03-01']);
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2027-08-01']);
+
+    $this->actingAs($user)
+        ->get(route('plan.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('hidden_months', ['2026-03']));
 });

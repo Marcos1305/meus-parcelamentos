@@ -58,10 +58,17 @@ const LABEL_CELL = 'relative flex items-center gap-2 pl-2';
 export function PlanGrid({
     plan,
     colors,
+    hiddenMonths,
 }: {
     plan: AnnualPlan;
     colors: LineColorOption[];
+    hiddenMonths: string[];
 }) {
+    /**
+     * Esconder é decisão de exibição: o plano continua trazendo os doze meses,
+     * e a grade desenha só os que ficaram.
+     */
+    const months = plan.months.filter((month) => !hiddenMonths.includes(month));
     /**
      * A renda vive numa linha só, mantida pelo servidor, e é digitada direto na
      * linha ENTRADA do rodapé — por isso ela não aparece no corpo da tabela
@@ -81,7 +88,7 @@ export function PlanGrid({
                         >
                             Categoria
                         </th>
-                        {plan.months.map((month) => (
+                        {months.map((month) => (
                             <th key={month} className={HEAD_CELL}>
                                 {monthHeader(month)}
                             </th>
@@ -114,7 +121,7 @@ export function PlanGrid({
                                     </span>
                                 </div>
                             </td>
-                            {plan.months.map((month) => (
+                            {months.map((month) => (
                                 <PlanCell
                                     key={month}
                                     url={amountRoutes.card(card.id, month)}
@@ -171,7 +178,7 @@ export function PlanGrid({
                                     />
                                 </div>
                             </td>
-                            {plan.months.map((month) => (
+                            {months.map((month) => (
                                 <PlanCell
                                     key={month}
                                     url={amountRoutes.line(line.id, month)}
@@ -189,10 +196,7 @@ export function PlanGrid({
                     ))}
 
                     <tr>
-                        <td
-                            colSpan={plan.months.length + 1}
-                            className="bg-muted/30"
-                        >
+                        <td colSpan={months.length + 1} className="bg-muted/30">
                             <BudgetLineForm />
                         </td>
                     </tr>
@@ -231,7 +235,7 @@ export function PlanGrid({
                                 <span>ENTRADA</span>
                             </div>
                         </td>
-                        {plan.months.map((month) =>
+                        {months.map((month) =>
                             incomeLine ? (
                                 <PlanCell
                                     key={month}
@@ -260,7 +264,7 @@ export function PlanGrid({
                         <td className={cn(STICKY, 'bg-card font-semibold')}>
                             SAÍDA
                         </td>
-                        {plan.months.map((month) => (
+                        {months.map((month) => (
                             <td key={month} className={BODY_CELL}>
                                 {formatBRL(plan.totals[month].expense_cents)}
                             </td>
@@ -270,7 +274,7 @@ export function PlanGrid({
                         <td className={cn(STICKY, 'bg-card font-semibold')}>
                             SALDO
                         </td>
-                        {plan.months.map((month) => (
+                        {months.map((month) => (
                             <td
                                 key={month}
                                 className={cn(

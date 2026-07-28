@@ -34,7 +34,26 @@ class PlanController extends Controller
             'plan' => $buildAnnualPlan->handle($request->user(), $year),
             'years' => [$currentYear - 1, $currentYear, $currentYear + 1],
             'colors' => LineColor::palette(),
+            'hidden_months' => $this->hiddenMonths($request, $year),
         ]);
+    }
+
+    /**
+     * Os meses que o usuario escondeu naquele ano, em YYYY-MM. Esconder e
+     * decisao de exibicao: os doze meses continuam vindo no plano, e a tela
+     * decide quais desenhar.
+     *
+     * @return array<int, string>
+     */
+    private function hiddenMonths(Request $request, int $year): array
+    {
+        return $request->user()->hiddenPlanMonths()
+            ->whereDate('month', '>=', "{$year}-01-01")
+            ->whereDate('month', '<=', "{$year}-12-31")
+            ->orderBy('month')
+            ->pluck('month')
+            ->map(fn (CarbonImmutable $month): string => $month->format('Y-m'))
+            ->all();
     }
 
     private function year(Request $request, int $currentYear): int

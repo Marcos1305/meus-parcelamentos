@@ -30,6 +30,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $updated_at
  * @property-read Collection<int, Card> $cards
  * @property-read Collection<int, BudgetLine> $budgetLines
+ * @property-read Collection<int, HiddenPlanMonth> $hiddenPlanMonths
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -48,6 +49,12 @@ class User extends Authenticatable implements PasskeyUser
     public function budgetLines(): HasMany
     {
         return $this->hasMany(BudgetLine::class);
+    }
+
+    /** @return HasMany<HiddenPlanMonth, $this> */
+    public function hiddenPlanMonths(): HasMany
+    {
+        return $this->hasMany(HiddenPlanMonth::class);
     }
 
     /**

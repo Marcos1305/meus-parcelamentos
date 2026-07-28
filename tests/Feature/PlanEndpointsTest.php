@@ -5,6 +5,7 @@ use App\Models\BudgetLine;
 use App\Models\BudgetLineAmount;
 use App\Models\Card;
 use App\Models\CardMonthAmount;
+use App\Models\HiddenPlanMonth;
 use App\Models\User;
 
 it('grava o valor de uma linha num mes', function (): void {
@@ -403,4 +404,86 @@ it('nao pinta cartao de outro usuario', function (): void {
     $this->actingAs(User::factory()->create())
         ->put(route('plan.cards.color', $alheio->id), ['color' => 'azul'])
         ->assertNotFound();
+});
+
+it('esconde meses do ano', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.months.hidden', 2026), ['months' => ['2026-01', '2026-02']])
+        ->assertRedirect();
+
+    expect(HiddenPlanMonth::query()->where('user_id', $user->id)
+        ->orderBy('month')->pluck('month')
+        ->map(fn ($m) => $m->format('Y-m'))->all())
+        ->toBe(['2026-01', '2026-02']);
+});
+
+it('a lista substitui a anterior do mesmo ano', function (): void {
+    $user = User::factory()->create();
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2026-01-01']);
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2026-05-01']);
+
+    $this->actingAs($user)->put(route('plan.months.hidden', 2026), ['months' => ['2026-09']]);
+
+    expect(HiddenPlanMonth::query()->where('user_id', $user->id)->pluck('month')
+        ->map(fn ($m) => $m->format('Y-m'))->all())
+        ->toBe(['2026-09']);
+});
+
+it('lista vazia mostra todos os meses de volta', function (): void {
+    $user = User::factory()->create();
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2026-01-01']);
+
+    $this->actingAs($user)->put(route('plan.months.hidden', 2026), ['months' => []]);
+
+    expect(HiddenPlanMonth::query()->count())->toBe(0);
+});
+
+it('nao mexe na escolha de outro ano', function (): void {
+    $user = User::factory()->create();
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2027-03-01']);
+
+    $this->actingAs($user)->put(route('plan.months.hidden', 2026), ['months' => ['2026-01']]);
+
+    expect(HiddenPlanMonth::query()->where('user_id', $user->id)->orderBy('month')->pluck('month')
+        ->map(fn ($m) => $m->format('Y-m'))->all())
+        ->toBe(['2026-01', '2027-03']);
+});
+
+it('recusa mes de outro ano na lista', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.months.hidden', 2026), ['months' => ['2027-01']])
+        ->assertSessionHasErrors('months.0');
+
+    expect(HiddenPlanMonth::query()->count())->toBe(0);
+});
+
+it('recusa mes malformado na lista', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->put(route('plan.months.hidden', 2026), ['months' => ['2026-13']])
+        ->assertSessionHasErrors('months.0');
+});
+
+it('recusa a lista ausente para nao apagar por acidente', function (): void {
+    $user = User::factory()->create();
+    HiddenPlanMonth::factory()->for($user)->create(['month' => '2026-01-01']);
+
+    $this->actingAs($user)
+        ->put(route('plan.months.hidden', 2026), [])
+        ->assertSessionHasErrors('months');
+
+    expect(HiddenPlanMonth::query()->count())->toBe(1);
+});
+
+it('nao esconde meses na conta de outro usuario', function (): void {
+    $alheio = User::factory()->create();
+    HiddenPlanMonth::factory()->for($alheio)->create(['month' => '2026-01-01']);
+
+    $this->actingAs(User::factory()->create())
+        ->put(route('plan.months.hidden', 2026), ['months' => ['2026-06']]);
+
+    expect(HiddenPlanMonth::query()->where('user_id', $alheio->id)->count())->toBe(1);
 });

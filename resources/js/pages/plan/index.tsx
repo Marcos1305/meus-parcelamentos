@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import { MonthVisibilityMenu } from '@/components/month-visibility-menu';
 import { PlanGrid } from '@/components/plan-grid';
 import { cn } from '@/lib/utils';
 import planRoute from '@/routes/plan';
@@ -8,9 +9,17 @@ type PlanProps = {
     plan: AnnualPlan;
     years: number[];
     colors: LineColorOption[];
+    hidden_months: string[];
 };
 
-export default function Plan({ plan, years, colors }: PlanProps) {
+export default function Plan({
+    plan,
+    years,
+    colors,
+    hidden_months: hiddenMonths,
+}: PlanProps) {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+
     return (
         <>
             <Head title="Planejamento" />
@@ -25,7 +34,13 @@ export default function Plan({ plan, years, colors }: PlanProps) {
                             Contas fixas, cartões e renda mês a mês
                         </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <MonthVisibilityMenu
+                            year={plan.year}
+                            months={plan.months}
+                            hiddenMonths={hiddenMonths}
+                            currentMonth={currentMonth}
+                        />
                         {years.map((year) => (
                             <Link
                                 key={year}
@@ -45,7 +60,11 @@ export default function Plan({ plan, years, colors }: PlanProps) {
                     </div>
                 </div>
 
-                <PlanGrid plan={plan} colors={colors} />
+                <PlanGrid
+                    plan={plan}
+                    colors={colors}
+                    hiddenMonths={hiddenMonths}
+                />
             </div>
         </>
     );
