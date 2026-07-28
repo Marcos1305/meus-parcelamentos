@@ -206,17 +206,16 @@ it('extrai as compras a vista', function (): void {
     }
 });
 
-it('nao confunde parcelada com a vista', function (): void {
+it('mantem a compra a vista de um estabelecimento que tambem tem parcelada', function (): void {
     $invoice = (new NubankInvoiceParser)->parse(nubankFixture());
 
-    $cashDescriptions = array_map(
-        fn ($line): string => $line->description,
-        $invoice->cashLines,
-    );
+    $repeated = 'Vuvepepedelu*Tomudibe';
 
-    foreach ($invoice->lines as $installment) {
-        expect($cashDescriptions)->not->toContain($installment->description);
-    }
+    $cashDescriptions = array_map(fn ($line): string => $line->description, $invoice->cashLines);
+    $installmentDescriptions = array_map(fn ($line): string => $line->description, $invoice->lines);
+
+    expect($cashDescriptions)->toContain($repeated)
+        ->and($installmentDescriptions)->toContain($repeated);
 });
 
 it('ignora pagamento recebido e saldo remanescente', function (): void {
