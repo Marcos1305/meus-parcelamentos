@@ -2,14 +2,15 @@ import { Head, Link } from '@inertiajs/react';
 import { PlanGrid } from '@/components/plan-grid';
 import { cn } from '@/lib/utils';
 import planRoute from '@/routes/plan';
-import type { AnnualPlan } from '@/types';
+import type { AnnualPlan, LineColorOption } from '@/types';
 
 type PlanProps = {
     plan: AnnualPlan;
     years: number[];
+    colors: LineColorOption[];
 };
 
-export default function Plan({ plan, years }: PlanProps) {
+export default function Plan({ plan, years, colors }: PlanProps) {
     return (
         <>
             <Head title="Planejamento" />
@@ -44,7 +45,7 @@ export default function Plan({ plan, years }: PlanProps) {
                     </div>
                 </div>
 
-                <PlanGrid plan={plan} />
+                <PlanGrid plan={plan} colors={colors} />
             </div>
         </>
     );

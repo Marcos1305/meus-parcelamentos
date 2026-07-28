@@ -15,8 +15,8 @@ class BuildAnnualPlan
      * @return array{
      *     year: int,
      *     months: array<int, string>,
-     *     cards: array<int, array{id: int, name: string, last_four_digits: string, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>,
-     *     lines: array<int, array{id: int, kind: string, name: string, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>,
+     *     cards: array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>,
+     *     lines: array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>,
      *     totals: array<string, array{income_cents: int, expense_cents: int, balance_cents: int}>,
      * }
      */
@@ -51,7 +51,7 @@ class BuildAnnualPlan
 
     /**
      * @param  array<int, string>  $months
-     * @return array<int, array{id: int, name: string, last_four_digits: string, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>
+     * @return array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>
      */
     private function cards(User $user, int $year, array $months): array
     {
@@ -79,6 +79,7 @@ class BuildAnnualPlan
                 'id' => $card->id,
                 'name' => $card->name,
                 'last_four_digits' => $card->last_four_digits,
+                'color' => $card->color?->value,
                 'months' => $byMonth,
             ];
         })->all();
@@ -148,7 +149,7 @@ class BuildAnnualPlan
 
     /**
      * @param  array<int, string>  $months
-     * @return array<int, array{id: int, kind: string, name: string, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>
+     * @return array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>
      */
     private function lines(User $user, int $year, array $months): array
     {
@@ -172,6 +173,7 @@ class BuildAnnualPlan
                 'id' => $line->id,
                 'kind' => $line->kind->value,
                 'name' => $line->name,
+                'color' => $line->color?->value,
                 'default_amount_cents' => $line->default_amount_cents,
                 'position' => $line->position,
                 'months' => $byMonth,

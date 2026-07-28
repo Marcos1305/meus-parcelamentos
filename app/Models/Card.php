@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CardBrand;
+use App\Enums\LineColor;
 use Database\Factories\CardFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
@@ -19,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property CardBrand $brand
  * @property string|null $label
+ * @property LineColor|null $color
  * @property string $last_four_digits
  * @property int $credit_limit_cents
  * @property int $closing_day
@@ -30,7 +32,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Installment> $installments
  * @property-read Collection<int, CardMonthAmount> $monthAmounts
  */
-#[Fillable(['name', 'brand', 'label', 'last_four_digits', 'credit_limit_cents', 'closing_day', 'due_day'])]
+#[Fillable(['name', 'brand', 'label', 'color', 'last_four_digits', 'credit_limit_cents', 'closing_day', 'due_day'])]
 class Card extends Model
 {
     /** @use HasFactory<CardFactory> */
@@ -67,6 +69,7 @@ class Card extends Model
     {
         return [
             'brand' => CardBrand::class,
+            'color' => LineColor::class,
             'credit_limit_cents' => 'integer',
             'closing_day' => 'integer',
             'due_day' => 'integer',

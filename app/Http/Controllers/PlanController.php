@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\BuildAnnualPlan;
 use App\Actions\EnsureIncomeLine;
+use App\Enums\LineColor;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -32,6 +33,7 @@ class PlanController extends Controller
         return Inertia::render('plan/index', [
             'plan' => $buildAnnualPlan->handle($request->user(), $year),
             'years' => [$currentYear - 1, $currentYear, $currentYear + 1],
+            'colors' => LineColor::palette(),
         ]);
     }
 

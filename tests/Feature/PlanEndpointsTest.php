@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\LineColor;
 use App\Models\BudgetLine;
 use App\Models\BudgetLineAmount;
 use App\Models\Card;
@@ -315,4 +316,91 @@ it('renomear uma linha criada pelo store nao reordena as demais do mesmo tipo', 
 
     expect($user->budgetLines()->orderBy('position')->pluck('name')->all())
         ->toBe(['Agua', 'Energia', 'Net']);
+});
+
+it('grava a cor de uma linha', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.color', $line->id), ['color' => 'azul'])
+        ->assertRedirect();
+
+    expect($line->fresh()->color)->toBe(LineColor::Azul);
+});
+
+it('cor nula tira a cor da linha', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create(['color' => 'azul']);
+
+    $this->actingAs($user)->put(route('plan.lines.color', $line->id), ['color' => null]);
+
+    expect($line->fresh()->color)->toBeNull();
+});
+
+it('recusa cor ausente para nao apagar por acidente', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create(['color' => 'azul']);
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.color', $line->id), [])
+        ->assertSessionHasErrors('color');
+
+    expect($line->fresh()->color)->toBe(LineColor::Azul);
+});
+
+it('recusa cor fora da paleta', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.color', $line->id), ['color' => 'fucsia'])
+        ->assertSessionHasErrors('color');
+});
+
+it('trocar a cor nao mexe na ordem das linhas', function (): void {
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    foreach (['Agua', 'Luz', 'Net'] as $nome) {
+        $this->post(route('plan.lines.store'), [
+            'kind' => 'expense',
+            'name' => $nome,
+            'default_amount_cents' => 100_00,
+        ]);
+    }
+
+    $meio = BudgetLine::query()->where('name', 'Luz')->firstOrFail();
+
+    $this->put(route('plan.lines.color', $meio->id), ['color' => 'verde']);
+
+    $ordem = BudgetLine::query()->where('user_id', $user->id)
+        ->orderBy('position')->orderBy('id')->pluck('name')->all();
+
+    expect($ordem)->toBe(['Agua', 'Luz', 'Net']);
+});
+
+it('grava a cor de um cartao', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->put(route('plan.cards.color', $card->id), ['color' => 'violeta']);
+
+    expect($card->fresh()->color)->toBe(LineColor::Violeta);
+});
+
+it('nao pinta linha de outro usuario', function (): void {
+    $alheia = BudgetLine::factory()->for(User::factory()->create())->create();
+
+    $this->actingAs(User::factory()->create())
+        ->put(route('plan.lines.color', $alheia->id), ['color' => 'azul'])
+        ->assertNotFound();
+});
+
+it('nao pinta cartao de outro usuario', function (): void {
+    $alheio = Card::factory()->for(User::factory()->create())->create();
+
+    $this->actingAs(User::factory()->create())
+        ->put(route('plan.cards.color', $alheio->id), ['color' => 'azul'])
+        ->assertNotFound();
 });

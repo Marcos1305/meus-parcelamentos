@@ -1,16 +1,22 @@
 import { BudgetLineCell } from '@/components/budget-line-cell';
 import { BudgetLineForm } from '@/components/budget-line-form';
 import { PlanCell } from '@/components/plan-cell';
+import { RowColorPicker, RowColorStripe } from '@/components/row-color-picker';
 import { formatBRL } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import planRoute from '@/routes/plan';
-import type { AnnualPlan } from '@/types';
+import type { AnnualPlan, LineColorOption } from '@/types';
 
 const amountRoutes = {
     line: (budgetLine: number, month: string) =>
         planRoute.lines.amount({ budgetLine, month }).url,
     card: (card: number, month: string) =>
         planRoute.cards.amount({ card, month }).url,
+};
+
+const colorRoutes = {
+    line: (budgetLine: number) => planRoute.lines.color(budgetLine).url,
+    card: (card: number) => planRoute.cards.color(card).url,
 };
 
 const MONTH_LABEL = new Intl.DateTimeFormat('pt-BR', {
@@ -43,8 +49,15 @@ const HEAD_CELL =
 const BODY_CELL = 'px-3 py-2 text-right text-sm tabular-nums whitespace-nowrap';
 const STICKY =
     'sticky left-0 z-10 bg-card px-3 py-2 text-left text-sm font-medium';
+const LABEL_CELL = 'relative flex items-center gap-2 pl-2';
 
-export function PlanGrid({ plan }: { plan: AnnualPlan }) {
+export function PlanGrid({
+    plan,
+    colors,
+}: {
+    plan: AnnualPlan;
+    colors: LineColorOption[];
+}) {
     /**
      * A renda vive numa linha só, mantida pelo servidor, e é digitada direto na
      * linha ENTRADA do rodapé — por isso ela não aparece no corpo da tabela
@@ -75,8 +88,22 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                 <tbody className="divide-y">
                     {plan.cards.map((card) => (
                         <tr key={`card-${card.id}`}>
-                            <td className={STICKY}>
-                                {card.name} • {card.last_four_digits}
+                            <td className={cn(STICKY, 'relative')}>
+                                <RowColorStripe
+                                    color={card.color}
+                                    colors={colors}
+                                />
+                                <div className={LABEL_CELL}>
+                                    <RowColorPicker
+                                        url={colorRoutes.card(card.id)}
+                                        color={card.color}
+                                        colors={colors}
+                                        rowName={card.name}
+                                    />
+                                    <span>
+                                        {card.name} • {card.last_four_digits}
+                                    </span>
+                                </div>
                             </td>
                             {plan.months.map((month) => (
                                 <PlanCell
@@ -109,12 +136,26 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
 
                     {expenseLines.map((line, index) => (
                         <tr key={line.id}>
-                            <td className={STICKY}>
-                                <BudgetLineCell
-                                    line={line}
-                                    isFirst={index === 0}
-                                    isLast={index === expenseLines.length - 1}
+                            <td className={cn(STICKY, 'relative')}>
+                                <RowColorStripe
+                                    color={line.color}
+                                    colors={colors}
                                 />
+                                <div className={LABEL_CELL}>
+                                    <RowColorPicker
+                                        url={colorRoutes.line(line.id)}
+                                        color={line.color}
+                                        colors={colors}
+                                        rowName={line.name}
+                                    />
+                                    <BudgetLineCell
+                                        line={line}
+                                        isFirst={index === 0}
+                                        isLast={
+                                            index === expenseLines.length - 1
+                                        }
+                                    />
+                                </div>
                             </td>
                             {plan.months.map((month) => (
                                 <PlanCell
@@ -145,8 +186,29 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
 
                 <tfoot className="border-t-2">
                     <tr className="bg-secondary/10">
-                        <td className={cn(STICKY, 'bg-card font-semibold')}>
-                            ENTRADA
+                        <td
+                            className={cn(
+                                STICKY,
+                                'relative bg-card font-semibold',
+                            )}
+                        >
+                            {incomeLine && (
+                                <RowColorStripe
+                                    color={incomeLine.color}
+                                    colors={colors}
+                                />
+                            )}
+                            <div className={LABEL_CELL}>
+                                {incomeLine && (
+                                    <RowColorPicker
+                                        url={colorRoutes.line(incomeLine.id)}
+                                        color={incomeLine.color}
+                                        colors={colors}
+                                        rowName="Entrada"
+                                    />
+                                )}
+                                <span>ENTRADA</span>
+                            </div>
                         </td>
                         {plan.months.map((month) =>
                             incomeLine ? (

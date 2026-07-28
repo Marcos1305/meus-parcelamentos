@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BudgetLineKind;
+use App\Enums\LineColor;
 use Carbon\CarbonImmutable;
 use Database\Factories\BudgetLineFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property BudgetLineKind $kind
  * @property string $name
+ * @property LineColor|null $color
  * @property int $default_amount_cents
  * @property int $position
  * @property CarbonImmutable|null $archived_at
@@ -27,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property-read User $user
  * @property-read Collection<int, BudgetLineAmount> $amounts
  */
-#[Fillable(['kind', 'name', 'default_amount_cents', 'position'])]
+#[Fillable(['kind', 'name', 'color', 'default_amount_cents', 'position'])]
 class BudgetLine extends Model
 {
     /** @use HasFactory<BudgetLineFactory> */
@@ -58,6 +60,7 @@ class BudgetLine extends Model
     {
         return [
             'kind' => BudgetLineKind::class,
+            'color' => LineColor::class,
             'default_amount_cents' => 'integer',
             'position' => 'integer',
             'archived_at' => 'immutable_datetime',

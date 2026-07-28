@@ -180,3 +180,25 @@ it('ordena as linhas por posicao', function (): void {
 
     expect(array_column(planFor($user)['lines'], 'name'))->toBe(['Energia', 'Agua']);
 });
+
+it('devolve a cor da linha e a do cartao', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->expense()->create(['color' => 'verde']);
+    Card::factory()->for($user)->create(['color' => 'azul']);
+
+    $plan = planFor($user);
+
+    expect($plan['lines'][0]['color'])->toBe('verde')
+        ->and($plan['cards'][0]['color'])->toBe('azul');
+});
+
+it('devolve cor nula quando ninguem escolheu', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->expense()->create();
+    Card::factory()->for($user)->create();
+
+    $plan = planFor($user);
+
+    expect($plan['lines'][0]['color'])->toBeNull()
+        ->and($plan['cards'][0]['color'])->toBeNull();
+});

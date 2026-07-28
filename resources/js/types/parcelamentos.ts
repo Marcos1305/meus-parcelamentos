@@ -155,6 +155,7 @@ export type PlanCardRow = {
     id: number;
     name: string;
     last_four_digits: string;
+    color: string | null;
     months: Record<string, PlanCardMonth>;
 };
 
@@ -162,9 +163,16 @@ export type PlanLineRow = {
     id: number;
     kind: 'income' | 'expense';
     name: string;
+    color: string | null;
     default_amount_cents: number;
     position: number;
     months: Record<string, PlanLineMonth>;
+};
+
+export type LineColorOption = {
+    value: string;
+    hex: string;
+    label: string;
 };
 
 export type PlanMonthTotals = {
