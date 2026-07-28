@@ -79,7 +79,7 @@ export function PlanGrid({
     const expenseLines = plan.lines.filter((line) => line.kind === 'expense');
 
     return (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border bg-card">
             <table className="w-full border-collapse">
                 <thead className="bg-muted">
                     <tr>
@@ -217,10 +217,15 @@ export function PlanGrid({
                                 'relative bg-card font-semibold',
                             )}
                         >
-                            {incomeLine && (
+                            {incomeLine?.color ? (
                                 <RowColorLayer
                                     color={incomeLine.color}
                                     colors={colors}
+                                />
+                            ) : (
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute inset-0 bg-secondary/10"
                                 />
                             )}
                             <div className={LABEL_CELL}>
@@ -261,8 +266,17 @@ export function PlanGrid({
                         )}
                     </tr>
                     <tr className="bg-destructive/10">
-                        <td className={cn(STICKY, 'bg-card font-semibold')}>
-                            SAÍDA
+                        <td
+                            className={cn(
+                                STICKY,
+                                'relative bg-card font-semibold',
+                            )}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="absolute inset-0 bg-destructive/10"
+                            />
+                            <span className="relative">SAÍDA</span>
                         </td>
                         {months.map((month) => (
                             <td key={month} className={BODY_CELL}>
@@ -271,8 +285,17 @@ export function PlanGrid({
                         ))}
                     </tr>
                     <tr className="bg-primary/20">
-                        <td className={cn(STICKY, 'bg-card font-semibold')}>
-                            SALDO
+                        <td
+                            className={cn(
+                                STICKY,
+                                'relative bg-card font-semibold',
+                            )}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className="absolute inset-0 bg-primary/20"
+                            />
+                            <span className="relative">SALDO</span>
                         </td>
                         {months.map((month) => (
                             <td
