@@ -101,3 +101,41 @@ it('extrai uma linha parcelada sem o numero do cartao', function (): void {
         ->and($lines[0]->installmentsCount)->toBe(6)
         ->and($lines[0]->amountCents)->toBe(4_404);
 });
+
+it('extrai as compras a vista', function (): void {
+    $cashLines = (new NubankInvoiceParser)->parse(nubankFixture())->cashLines;
+
+    expect($cashLines)->toHaveCount(53);
+
+    foreach ($cashLines as $line) {
+        expect($line->amountCents)->toBeGreaterThan(0)
+            ->and($line->transactionDay)->toBeBetween(1, 31)
+            ->and($line->transactionMonth)->toBeBetween(1, 12)
+            ->and($line->description)->not->toContain('Parcela');
+    }
+});
+
+it('nao confunde parcelada com a vista', function (): void {
+    $invoice = (new NubankInvoiceParser)->parse(nubankFixture());
+
+    $cashDescriptions = array_map(
+        fn ($line): string => $line->description,
+        $invoice->cashLines,
+    );
+
+    foreach ($invoice->lines as $installment) {
+        expect($cashDescriptions)->not->toContain($installment->description);
+    }
+});
+
+it('ignora pagamento recebido e saldo remanescente', function (): void {
+    $descriptions = array_map(
+        fn ($line): string => mb_strtolower($line->description),
+        (new NubankInvoiceParser)->parse(nubankFixture())->cashLines,
+    );
+
+    foreach ($descriptions as $description) {
+        expect($description)->not->toContain('pagamento recebido')
+            ->and($description)->not->toContain('saldo restante');
+    }
+});
