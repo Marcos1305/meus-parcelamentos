@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\BuildAnnualPlan;
+use App\Actions\EnsureIncomeLine;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,10 +19,15 @@ class PlanController extends Controller
 
     private const LAST_YEAR = 2100;
 
-    public function index(Request $request, BuildAnnualPlan $buildAnnualPlan): Response
-    {
+    public function index(
+        Request $request,
+        BuildAnnualPlan $buildAnnualPlan,
+        EnsureIncomeLine $ensureIncomeLine,
+    ): Response {
         $currentYear = CarbonImmutable::now()->year;
         $year = $this->year($request, $currentYear);
+
+        $ensureIncomeLine->handle($request->user());
 
         return Inertia::render('plan/index', [
             'plan' => $buildAnnualPlan->handle($request->user(), $year),

@@ -45,7 +45,13 @@ const STICKY =
     'sticky left-0 z-10 bg-card px-3 py-2 text-left text-sm font-medium';
 
 export function PlanGrid({ plan }: { plan: AnnualPlan }) {
-    const incomeLines = plan.lines.filter((line) => line.kind === 'income');
+    /**
+     * A renda vive numa linha só, mantida pelo servidor, e é digitada direto na
+     * linha ENTRADA do rodapé — por isso ela não aparece no corpo da tabela
+     * junto das contas fixas.
+     */
+    const incomeLine =
+        plan.lines.find((line) => line.kind === 'income') ?? null;
     const expenseLines = plan.lines.filter((line) => line.kind === 'expense');
 
     return (
@@ -67,41 +73,6 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                 </thead>
 
                 <tbody className="divide-y">
-                    {incomeLines.map((line, index) => (
-                        <tr key={line.id}>
-                            <td className={STICKY}>
-                                <BudgetLineCell
-                                    line={line}
-                                    isFirst={index === 0}
-                                    isLast={index === incomeLines.length - 1}
-                                />
-                            </td>
-                            {plan.months.map((month) => (
-                                <PlanCell
-                                    key={month}
-                                    url={amountRoutes.line(line.id, month)}
-                                    valueCents={
-                                        line.months[month].effective_cents
-                                    }
-                                    isExplicit={
-                                        line.months[month].amount_cents !== null
-                                    }
-                                    hint={null}
-                                    label={cellLabel(line.name, month)}
-                                />
-                            ))}
-                        </tr>
-                    ))}
-
-                    <tr>
-                        <td
-                            colSpan={plan.months.length + 1}
-                            className="bg-muted/30"
-                        >
-                            <BudgetLineForm kind="income" />
-                        </td>
-                    </tr>
-
                     {plan.cards.map((card) => (
                         <tr key={`card-${card.id}`}>
                             <td className={STICKY}>
@@ -167,7 +138,7 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                             colSpan={plan.months.length + 1}
                             className="bg-muted/30"
                         >
-                            <BudgetLineForm kind="expense" />
+                            <BudgetLineForm />
                         </td>
                     </tr>
                 </tbody>
@@ -177,11 +148,30 @@ export function PlanGrid({ plan }: { plan: AnnualPlan }) {
                         <td className={cn(STICKY, 'bg-card font-semibold')}>
                             ENTRADA
                         </td>
-                        {plan.months.map((month) => (
-                            <td key={month} className={BODY_CELL}>
-                                {formatBRL(plan.totals[month].income_cents)}
-                            </td>
-                        ))}
+                        {plan.months.map((month) =>
+                            incomeLine ? (
+                                <PlanCell
+                                    key={month}
+                                    url={amountRoutes.line(
+                                        incomeLine.id,
+                                        month,
+                                    )}
+                                    valueCents={
+                                        incomeLine.months[month].effective_cents
+                                    }
+                                    isExplicit={
+                                        incomeLine.months[month]
+                                            .amount_cents !== null
+                                    }
+                                    hint={null}
+                                    label={cellLabel('Entrada', month)}
+                                />
+                            ) : (
+                                <td key={month} className={BODY_CELL}>
+                                    {formatBRL(plan.totals[month].income_cents)}
+                                </td>
+                            ),
+                        )}
                     </tr>
                     <tr className="bg-destructive/10">
                         <td className={cn(STICKY, 'bg-card font-semibold')}>

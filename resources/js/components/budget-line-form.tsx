@@ -6,9 +6,13 @@ import { Input } from '@/components/ui/input';
 import { parseBRLToCents } from '@/lib/currency';
 import planRoute from '@/routes/plan';
 
-export function BudgetLineForm({ kind }: { kind: 'income' | 'expense' }) {
+/**
+ * Só cria conta fixa. A renda é uma linha única mantida pelo servidor e não
+ * passa por aqui.
+ */
+export function BudgetLineForm() {
     const form = useForm({
-        kind,
+        kind: 'expense',
         name: '',
         default_amount_cents: 0,
     });
@@ -27,7 +31,7 @@ export function BudgetLineForm({ kind }: { kind: 'income' | 'expense' }) {
             <Input
                 value={form.data.name}
                 onChange={(event) => form.setData('name', event.target.value)}
-                placeholder={kind === 'income' ? 'Nova entrada' : 'Nova conta'}
+                placeholder="Nova conta"
                 className="h-8 w-48"
             />
             <Input

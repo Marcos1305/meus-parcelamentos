@@ -269,16 +269,10 @@ it('linha arquivada no meio nao impede a troca entre duas ativas do mesmo tipo',
         ->and($ativaB->fresh()->position)->toBe(2);
 });
 
-it('cria renda e despesa no fim da fila do proprio tipo', function (): void {
+it('a linha de renda nao entra na contagem de posicao das despesas', function (): void {
     $user = User::factory()->create();
     BudgetLine::factory()->for($user)->income()->create(['position' => 3]);
     BudgetLine::factory()->for($user)->expense()->create(['position' => 7]);
-
-    $this->actingAs($user)->post(route('plan.lines.store'), [
-        'kind' => 'income',
-        'name' => 'Freelance',
-        'default_amount_cents' => 50_00,
-    ]);
 
     $this->actingAs($user)->post(route('plan.lines.store'), [
         'kind' => 'expense',
@@ -286,8 +280,21 @@ it('cria renda e despesa no fim da fila do proprio tipo', function (): void {
         'default_amount_cents' => 30_00,
     ]);
 
-    expect(BudgetLine::query()->where('name', 'Freelance')->value('position'))->toBe(1)
-        ->and(BudgetLine::query()->where('name', 'Streaming')->value('position'))->toBe(1);
+    expect(BudgetLine::query()->where('name', 'Streaming')->value('position'))->toBe(1);
+});
+
+it('recusa criar uma segunda linha de renda', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('plan.lines.store'), [
+            'kind' => 'income',
+            'name' => 'Freelance',
+            'default_amount_cents' => 50_00,
+        ])
+        ->assertSessionHasErrors('kind');
+
+    expect(BudgetLine::query()->where('name', 'Freelance')->exists())->toBeFalse();
 });
 
 it('renomear uma linha criada pelo store nao reordena as demais do mesmo tipo', function (): void {
