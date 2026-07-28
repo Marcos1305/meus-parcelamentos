@@ -1,7 +1,11 @@
 import { BudgetLineCell } from '@/components/budget-line-cell';
 import { BudgetLineForm } from '@/components/budget-line-form';
 import { PlanCell } from '@/components/plan-cell';
-import { RowColorPicker, RowColorStripe } from '@/components/row-color-picker';
+import {
+    RowColorLayer,
+    RowColorPicker,
+    rowTint,
+} from '@/components/row-color-picker';
 import { formatBRL } from '@/lib/currency';
 import { cn } from '@/lib/utils';
 import planRoute from '@/routes/plan';
@@ -87,9 +91,14 @@ export function PlanGrid({
 
                 <tbody className="divide-y">
                     {plan.cards.map((card) => (
-                        <tr key={`card-${card.id}`}>
+                        <tr
+                            key={`card-${card.id}`}
+                            style={{
+                                backgroundColor: rowTint(card.color, colors),
+                            }}
+                        >
                             <td className={cn(STICKY, 'relative')}>
-                                <RowColorStripe
+                                <RowColorLayer
                                     color={card.color}
                                     colors={colors}
                                 />
@@ -135,9 +144,14 @@ export function PlanGrid({
                     ))}
 
                     {expenseLines.map((line, index) => (
-                        <tr key={line.id}>
+                        <tr
+                            key={line.id}
+                            style={{
+                                backgroundColor: rowTint(line.color, colors),
+                            }}
+                        >
                             <td className={cn(STICKY, 'relative')}>
-                                <RowColorStripe
+                                <RowColorLayer
                                     color={line.color}
                                     colors={colors}
                                 />
@@ -185,7 +199,14 @@ export function PlanGrid({
                 </tbody>
 
                 <tfoot className="border-t-2">
-                    <tr className="bg-secondary/10">
+                    <tr
+                        className="bg-secondary/10"
+                        style={{
+                            backgroundColor: incomeLine
+                                ? rowTint(incomeLine.color, colors)
+                                : undefined,
+                        }}
+                    >
                         <td
                             className={cn(
                                 STICKY,
@@ -193,7 +214,7 @@ export function PlanGrid({
                             )}
                         >
                             {incomeLine && (
-                                <RowColorStripe
+                                <RowColorLayer
                                     color={incomeLine.color}
                                     colors={colors}
                                 />

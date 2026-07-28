@@ -80,10 +80,33 @@ export function RowColorPicker({
 }
 
 /**
- * A faixa que marca a linha na coluna do nome. Sem cor escolhida ela não ocupa
- * espaço, para que a tabela continue igual para quem não usa o recurso.
+ * Alfa do fundo da linha, em hexadecimal: 14%. Baixo o bastante para não
+ * competir com o cinza de valor herdado nem com o vermelho de saldo negativo,
+ * que são os sinais que a tabela precisa preservar.
  */
-export function RowColorStripe({
+const ROW_TINT_ALPHA = '24';
+
+/**
+ * O fundo da linha inteira. Devolve `undefined` sem cor escolhida, para que a
+ * linha continue exatamente como era para quem não usa o recurso.
+ */
+export function rowTint(
+    color: string | null,
+    colors: LineColorOption[],
+): string | undefined {
+    const selected = colors.find((option) => option.value === color);
+
+    return selected ? `${selected.hex}${ROW_TINT_ALPHA}` : undefined;
+}
+
+/**
+ * O fundo e a faixa dentro da coluna fixa do nome.
+ *
+ * A célula fixa precisa de fundo opaco, senão o conteúdo das colunas de mês
+ * passa por baixo dela na rolagem horizontal. Por isso o tom entra como uma
+ * camada por cima desse fundo, em vez de substituí-lo.
+ */
+export function RowColorLayer({
     color,
     colors,
 }: {
@@ -97,10 +120,19 @@ export function RowColorStripe({
     }
 
     return (
-        <span
-            aria-hidden="true"
-            className="absolute inset-y-0 left-0 w-1"
-            style={{ backgroundColor: selected.hex }}
-        />
+        <>
+            <span
+                aria-hidden="true"
+                className="absolute inset-0"
+                style={{
+                    backgroundColor: `${selected.hex}${ROW_TINT_ALPHA}`,
+                }}
+            />
+            <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 w-1"
+                style={{ backgroundColor: selected.hex }}
+            />
+        </>
     );
 }
