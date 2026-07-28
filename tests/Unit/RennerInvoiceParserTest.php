@@ -131,3 +131,15 @@ it('nao le a vista das proximas faturas', function (): void {
 
     expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
 });
+
+it('descarta uma compra a vista com valor negativo', function (): void {
+    $negative = '26/03/2026    Compra a Vista                       ESTORNO DE COMPRA                                        -50,00';
+
+    $text = str_replace(
+        'Compras parceladas | Próximas faturas:',
+        $negative."\nCompras parceladas | Próximas faturas:",
+        rennerFixture(),
+    );
+
+    expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
+});
