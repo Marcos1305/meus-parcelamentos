@@ -3,6 +3,7 @@
 namespace App\Invoices\Parsers;
 
 use App\Invoices\InvoiceParser;
+use App\Invoices\ParsedCashLine;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\UnreadableInvoiceException;
@@ -40,6 +41,12 @@ class RennerInvoiceParser implements InvoiceParser
      */
     private const INSTALLMENT_LINE_PATTERN = '/^(\d{2})\/(\d{2})\/(\d{4})\s+Compra Parcelada Parc\s+(\d{1,2})\/(\d{1,2})\s+(.+?)\s{2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})\s*$/u';
 
+    /**
+     * A Renner rotula a compra avulsa no proprio texto, o que dispensa
+     * qualquer inferencia por ausencia de sufixo.
+     */
+    private const CASH_LINE_PATTERN = '/^(\d{2})\/(\d{2})\/(\d{4})\s+Compra a Vista\s+(.+?)\s{2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})\s*$/u';
+
     public function supports(string $text): bool
     {
         return str_contains($text, self::SIGNATURE);
@@ -55,6 +62,7 @@ class RennerInvoiceParser implements InvoiceParser
             dueDate: $this->extractDueDate($text),
             lastFourDigits: $this->extractLastFourDigits($text),
             lines: $this->extractLines($this->cutFutureInstallments($text)),
+            cashLines: $this->extractCashLines($this->cutFutureInstallments($text)),
         );
     }
 
@@ -121,6 +129,39 @@ class RennerInvoiceParser implements InvoiceParser
                 installmentNumber: (int) $matches[4],
                 installmentsCount: (int) $matches[5],
                 amountCents: $this->parseAmountCents($matches[8]),
+            );
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return array<int, ParsedCashLine>
+     */
+    private function extractCashLines(string $text): array
+    {
+        $lines = [];
+
+        foreach (explode("\n", $text) as $rawLine) {
+            if (! preg_match(self::CASH_LINE_PATTERN, $rawLine, $matches)) {
+                continue;
+            }
+
+            if ($matches[5] !== '') {
+                continue;
+            }
+
+            $amountCents = $this->parseAmountCents($matches[6]);
+
+            if ($amountCents < 1) {
+                continue;
+            }
+
+            $lines[] = new ParsedCashLine(
+                description: trim($matches[4]),
+                transactionDay: (int) $matches[1],
+                transactionMonth: (int) $matches[2],
+                amountCents: $amountCents,
             );
         }
 
