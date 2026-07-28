@@ -3,6 +3,7 @@
 namespace App\Invoices\Parsers;
 
 use App\Invoices\InvoiceParser;
+use App\Invoices\ParsedCashLine;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\UnreadableInvoiceException;
@@ -45,6 +46,19 @@ class ItauInvoiceParser implements InvoiceParser
      */
     private const INSTALLMENT_LINE_PATTERN = '/(?<!\d)(\d{2})\/(\d{2}) {2,}((?:\S+ {1,2})+?)(\d{1,2})\/(\d{1,2}) {2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/u';
 
+    /**
+     * O layout tem duas colunas por linha de texto, entao uma linha pode
+     * conter pagamento a esquerda e compra a direita: dai o preg_match_all.
+     *
+     * O padrao nao consegue, sozinho, distinguir compra avulsa de parcelada —
+     * a descricao e preguicosa e pararia antes do "N/M", deixando-o de fora e
+     * fazendo a parcela passar por compra a vista. O sufixo e testado depois,
+     * contra a descricao ja capturada.
+     */
+    private const CASH_LINE_PATTERN = '/(?<!\d)(\d{2})\/(\d{2}) {2,}(\S.*?) {2,}(-?)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)/u';
+
+    private const INSTALLMENT_SUFFIX_PATTERN = '/ \d{1,2}\/\d{1,2}$/u';
+
     public function supports(string $text): bool
     {
         foreach (self::SIGNATURES as $signature) {
@@ -66,6 +80,7 @@ class ItauInvoiceParser implements InvoiceParser
             dueDate: $this->extractDueDate($text),
             lastFourDigits: $this->extractLastFourDigits($text),
             lines: $this->extractLines($this->cutFutureInstallments($text)),
+            cashLines: $this->extractCashLines($this->cutFutureInstallments($text)),
         );
     }
 
@@ -137,6 +152,45 @@ class ItauInvoiceParser implements InvoiceParser
                     installmentNumber: (int) $match[4],
                     installmentsCount: (int) $match[5],
                     amountCents: $this->parseAmountCents($match[7]),
+                );
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return array<int, ParsedCashLine>
+     */
+    private function extractCashLines(string $text): array
+    {
+        $lines = [];
+
+        foreach (explode("\n", $text) as $rawLine) {
+            preg_match_all(self::CASH_LINE_PATTERN, $rawLine, $allMatches, PREG_SET_ORDER);
+
+            foreach ($allMatches as $matches) {
+                $description = rtrim($matches[3]);
+
+                if (preg_match(self::INSTALLMENT_SUFFIX_PATTERN, $description)) {
+                    continue;
+                }
+
+                if ($matches[4] !== '') {
+                    continue;
+                }
+
+                $amountCents = $this->parseAmountCents($matches[5]);
+
+                if ($amountCents < 1) {
+                    continue;
+                }
+
+                $lines[] = new ParsedCashLine(
+                    description: $description,
+                    transactionDay: (int) $matches[1],
+                    transactionMonth: (int) $matches[2],
+                    amountCents: $amountCents,
                 );
             }
         }
