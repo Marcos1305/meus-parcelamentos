@@ -369,18 +369,14 @@ it('ignora pagamento de fatura', function (): void {
 });
 
 it('nao le a vista das proximas faturas', function (): void {
-    $parser = new RennerInvoiceParser;
-    $text = rennerFixture();
+    $text = rennerFixture()
+        ."\n01/09/2026    Compra a Vista                       LOJA DA PROXIMA FATURA                                    99,00\n";
 
-    $beforeMarker = mb_substr($text, 0, (int) mb_strpos($text, 'Compras parceladas | Próximas faturas:'));
-
-    expect($parser->parse($text)->cashLines)
-        ->toHaveCount(count($parser->parse($beforeMarker.'
-Vencimento: 01/01/2030')->cashLines));
+    expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
 });
 ```
 
-> A terceira asserção confirma que o corte da seção de próximas faturas é aplicado: cortar o texto manualmente no marcador não muda a contagem. O `Vencimento:` postiço existe só porque `parse()` exige um vencimento legível.
+> O marcador `Compras parceladas | Próximas faturas:` fica no meio da fixture, então a linha acrescentada no fim cai depois dele. Sem o corte a contagem iria a 22; com o corte fica em 21. A fixture, sozinha, não prova nada sobre o corte: ela não tem nenhuma linha à vista depois do marcador, e um teste que apenas a comparasse consigo mesma passaria de qualquer jeito.
 
 - [ ] **Step 2: Rodar e ver falhar**
 
