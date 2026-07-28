@@ -1,10 +1,11 @@
 <?php
 
-use App\Enums\LineColor;
 use App\Models\BudgetLine;
 use App\Models\BudgetLineAmount;
+use App\Models\BudgetLinePayment;
 use App\Models\Card;
 use App\Models\CardMonthAmount;
+use App\Models\CardPayment;
 use App\Models\HiddenPlanMonth;
 use App\Models\User;
 
@@ -324,15 +325,15 @@ it('grava a cor de uma linha', function (): void {
     $line = BudgetLine::factory()->for($user)->create();
 
     $this->actingAs($user)
-        ->put(route('plan.lines.color', $line->id), ['color' => 'azul'])
+        ->put(route('plan.lines.color', $line->id), ['color' => '#3b82f6'])
         ->assertRedirect();
 
-    expect($line->fresh()->color)->toBe(LineColor::Azul);
+    expect($line->fresh()->color)->toBe('#3b82f6');
 });
 
 it('cor nula tira a cor da linha', function (): void {
     $user = User::factory()->create();
-    $line = BudgetLine::factory()->for($user)->create(['color' => 'azul']);
+    $line = BudgetLine::factory()->for($user)->create(['color' => '#3b82f6']);
 
     $this->actingAs($user)->put(route('plan.lines.color', $line->id), ['color' => null]);
 
@@ -341,13 +342,13 @@ it('cor nula tira a cor da linha', function (): void {
 
 it('recusa cor ausente para nao apagar por acidente', function (): void {
     $user = User::factory()->create();
-    $line = BudgetLine::factory()->for($user)->create(['color' => 'azul']);
+    $line = BudgetLine::factory()->for($user)->create(['color' => '#3b82f6']);
 
     $this->actingAs($user)
         ->put(route('plan.lines.color', $line->id), [])
         ->assertSessionHasErrors('color');
 
-    expect($line->fresh()->color)->toBe(LineColor::Azul);
+    expect($line->fresh()->color)->toBe('#3b82f6');
 });
 
 it('recusa cor fora da paleta', function (): void {
@@ -355,7 +356,7 @@ it('recusa cor fora da paleta', function (): void {
     $line = BudgetLine::factory()->for($user)->create();
 
     $this->actingAs($user)
-        ->put(route('plan.lines.color', $line->id), ['color' => 'fucsia'])
+        ->put(route('plan.lines.color', $line->id), ['color' => 'nao-e-hex'])
         ->assertSessionHasErrors('color');
 });
 
@@ -373,7 +374,7 @@ it('trocar a cor nao mexe na ordem das linhas', function (): void {
 
     $meio = BudgetLine::query()->where('name', 'Luz')->firstOrFail();
 
-    $this->put(route('plan.lines.color', $meio->id), ['color' => 'verde']);
+    $this->put(route('plan.lines.color', $meio->id), ['color' => '#22c55e']);
 
     $ordem = BudgetLine::query()->where('user_id', $user->id)
         ->orderBy('position')->orderBy('id')->pluck('name')->all();
@@ -385,16 +386,16 @@ it('grava a cor de um cartao', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create();
 
-    $this->actingAs($user)->put(route('plan.cards.color', $card->id), ['color' => 'violeta']);
+    $this->actingAs($user)->put(route('plan.cards.color', $card->id), ['color' => '#8b5cf6']);
 
-    expect($card->fresh()->color)->toBe(LineColor::Violeta);
+    expect($card->fresh()->color)->toBe('#8b5cf6');
 });
 
 it('nao pinta linha de outro usuario', function (): void {
     $alheia = BudgetLine::factory()->for(User::factory()->create())->create();
 
     $this->actingAs(User::factory()->create())
-        ->put(route('plan.lines.color', $alheia->id), ['color' => 'azul'])
+        ->put(route('plan.lines.color', $alheia->id), ['color' => '#3b82f6'])
         ->assertNotFound();
 });
 
@@ -402,7 +403,7 @@ it('nao pinta cartao de outro usuario', function (): void {
     $alheio = Card::factory()->for(User::factory()->create())->create();
 
     $this->actingAs(User::factory()->create())
-        ->put(route('plan.cards.color', $alheio->id), ['color' => 'azul'])
+        ->put(route('plan.cards.color', $alheio->id), ['color' => '#3b82f6'])
         ->assertNotFound();
 });
 
@@ -486,4 +487,116 @@ it('nao esconde meses na conta de outro usuario', function (): void {
         ->put(route('plan.months.hidden', 2026), ['months' => ['2026-06']]);
 
     expect(HiddenPlanMonth::query()->where('user_id', $alheio->id)->count())->toBe(1);
+});
+
+it('marca uma conta como paga no mes', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.paid', [$line->id, '2026-05']), ['paid' => true])
+        ->assertRedirect();
+
+    expect(BudgetLinePayment::query()->where('budget_line_id', $line->id)->count())->toBe(1);
+});
+
+it('marcar duas vezes nao cria duas marcas', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.paid', [$line->id, '2026-05']), ['paid' => true])
+        ->assertRedirect();
+
+    // A segunda chamada precisa ser bem-sucedida, nao apenas nao duplicar: sem
+    // esta asserção o teste passaria tambem se ela estourasse a constraint e
+    // devolvesse erro.
+    $this->actingAs($user)
+        ->put(route('plan.lines.paid', [$line->id, '2026-05']), ['paid' => true])
+        ->assertRedirect();
+
+    expect(BudgetLinePayment::query()->count())->toBe(1);
+});
+
+it('desmarca a conta como paga', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+    BudgetLinePayment::factory()->for($line)->create(['month' => '2026-05-01']);
+
+    $this->actingAs($user)->put(route('plan.lines.paid', [$line->id, '2026-05']), ['paid' => false]);
+
+    expect(BudgetLinePayment::query()->count())->toBe(0);
+});
+
+it('marcar como paga nao fixa o valor do mes', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create(['default_amount_cents' => 400_00]);
+
+    $this->actingAs($user)->put(route('plan.lines.paid', [$line->id, '2026-05']), ['paid' => true]);
+
+    expect(BudgetLineAmount::query()->count())->toBe(0);
+});
+
+it('marca uma fatura de cartao como paga', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->put(route('plan.cards.paid', [$card->id, '2026-09']), ['paid' => true]);
+
+    expect(CardPayment::query()->where('card_id', $card->id)->count())->toBe(1);
+});
+
+it('marcar fatura como paga nao cria correcao de valor', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->put(route('plan.cards.paid', [$card->id, '2026-09']), ['paid' => true]);
+
+    expect(CardMonthAmount::query()->count())->toBe(0);
+});
+
+it('recusa paid ausente', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.paid', [$line->id, '2026-05']), [])
+        ->assertSessionHasErrors('paid');
+});
+
+it('recusa mes malformado ao marcar como paga', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.paid', [$line->id, '2026-13']), ['paid' => true])
+        ->assertNotFound();
+});
+
+it('nao marca conta de outro usuario como paga', function (): void {
+    $alheia = BudgetLine::factory()->for(User::factory()->create())->create();
+
+    $this->actingAs(User::factory()->create())
+        ->put(route('plan.lines.paid', [$alheia->id, '2026-05']), ['paid' => true])
+        ->assertNotFound();
+
+    expect(BudgetLinePayment::query()->count())->toBe(0);
+});
+
+it('aceita cor hexadecimal fora da paleta', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)->put(route('plan.lines.color', $line->id), ['color' => '#A1B2C3']);
+
+    expect($line->fresh()->color)->toBe('#a1b2c3');
+});
+
+it('recusa cor que nao e hexadecimal', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->put(route('plan.lines.color', $line->id), ['color' => 'azul'])
+        ->assertSessionHasErrors('color');
 });

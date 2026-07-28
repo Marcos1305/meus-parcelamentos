@@ -15,9 +15,9 @@ class BuildAnnualPlan
      * @return array{
      *     year: int,
      *     months: array<int, string>,
-     *     cards: array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>,
-     *     lines: array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>,
-     *     totals: array<string, array{income_cents: int, expense_cents: int, balance_cents: int}>,
+     *     cards: array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int, paid: bool}>}>,
+     *     lines: array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int, paid: bool}>}>,
+     *     totals: array<string, array{income_cents: int, expense_cents: int, balance_cents: int, unpaid_cents: int}>,
      * }
      */
     public function handle(User $user, int $year): array
@@ -51,7 +51,7 @@ class BuildAnnualPlan
 
     /**
      * @param  array<int, string>  $months
-     * @return array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int}>}>
+     * @return array<int, array{id: int, name: string, last_four_digits: string, color: string|null, months: array<string, array{computed_cents: int, override_cents: int|null, effective_cents: int, paid: bool}>}>
      */
     private function cards(User $user, int $year, array $months): array
     {
@@ -60,8 +60,9 @@ class BuildAnnualPlan
 
         $computed = $this->computedByCard($cardIds, $year);
         $overrides = $this->overridesByCard($cardIds, $year);
+        $paid = $this->monthsMarkedPaid('card_payments', 'card_id', $cardIds, $year);
 
-        return $cards->map(function (Card $card) use ($months, $computed, $overrides): array {
+        return $cards->map(function (Card $card) use ($months, $computed, $overrides, $paid): array {
             $byMonth = [];
 
             foreach ($months as $month) {
@@ -72,6 +73,7 @@ class BuildAnnualPlan
                     'computed_cents' => $computedCents,
                     'override_cents' => $overrideCents,
                     'effective_cents' => $overrideCents ?? $computedCents,
+                    'paid' => isset($paid[$card->id][$month]),
                 ];
             }
 
@@ -79,7 +81,7 @@ class BuildAnnualPlan
                 'id' => $card->id,
                 'name' => $card->name,
                 'last_four_digits' => $card->last_four_digits,
-                'color' => $card->color?->value,
+                'color' => $card->color,
                 'months' => $byMonth,
             ];
         })->all();
@@ -149,15 +151,17 @@ class BuildAnnualPlan
 
     /**
      * @param  array<int, string>  $months
-     * @return array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int}>}>
+     * @return array<int, array{id: int, kind: string, name: string, color: string|null, default_amount_cents: int, position: int, months: array<string, array{amount_cents: int|null, effective_cents: int, paid: bool}>}>
      */
     private function lines(User $user, int $year, array $months): array
     {
         $lines = $user->budgetLines()->active()->orderBy('position')->orderBy('id')->get();
 
-        $amounts = $this->amountsByLine($lines->pluck('id')->all(), $year);
+        $lineIds = $lines->pluck('id')->all();
+        $amounts = $this->amountsByLine($lineIds, $year);
+        $paid = $this->monthsMarkedPaid('budget_line_payments', 'budget_line_id', $lineIds, $year);
 
-        return $lines->map(function (BudgetLine $line) use ($months, $amounts): array {
+        return $lines->map(function (BudgetLine $line) use ($months, $amounts, $paid): array {
             $byMonth = [];
 
             foreach ($months as $month) {
@@ -166,6 +170,7 @@ class BuildAnnualPlan
                 $byMonth[$month] = [
                     'amount_cents' => $amountCents,
                     'effective_cents' => $amountCents ?? $line->default_amount_cents,
+                    'paid' => isset($paid[$line->id][$month]),
                 ];
             }
 
@@ -173,7 +178,7 @@ class BuildAnnualPlan
                 'id' => $line->id,
                 'kind' => $line->kind->value,
                 'name' => $line->name,
-                'color' => $line->color?->value,
+                'color' => $line->color,
                 'default_amount_cents' => $line->default_amount_cents,
                 'position' => $line->position,
                 'months' => $byMonth,
@@ -207,10 +212,38 @@ class BuildAnnualPlan
     }
 
     /**
+     * Os meses marcados como pagos, indexados pelo dono. As duas tabelas de
+     * pagamento tem a mesma forma, entao a leitura e uma so.
+     *
+     * @param  array<int, int>  $ownerIds
+     * @return array<int, array<string, true>>
+     */
+    private function monthsMarkedPaid(string $table, string $ownerColumn, array $ownerIds, int $year): array
+    {
+        if ($ownerIds === []) {
+            return [];
+        }
+
+        $rows = DB::table($table)
+            ->whereIn($ownerColumn, $ownerIds)
+            ->whereDate('month', '>=', "{$year}-01-01")
+            ->whereDate('month', '<=', "{$year}-12-31")
+            ->get([$ownerColumn, 'month']);
+
+        $paid = [];
+
+        foreach ($rows as $row) {
+            $paid[(int) $row->{$ownerColumn}][substr((string) $row->month, 0, 7)] = true;
+        }
+
+        return $paid;
+    }
+
+    /**
      * @param  array<int, string>  $months
      * @param  array<int, array<string, mixed>>  $cards
      * @param  array<int, array<string, mixed>>  $lines
-     * @return array<string, array{income_cents: int, expense_cents: int, balance_cents: int}>
+     * @return array<string, array{income_cents: int, expense_cents: int, balance_cents: int, unpaid_cents: int}>
      */
     private function totals(array $months, array $cards, array $lines): array
     {
@@ -219,6 +252,7 @@ class BuildAnnualPlan
         foreach ($months as $month) {
             $income = 0;
             $expense = 0;
+            $unpaid = 0;
 
             foreach ($lines as $line) {
                 $effective = $line['months'][$month]['effective_cents'];
@@ -230,16 +264,25 @@ class BuildAnnualPlan
                 }
 
                 $expense += $effective;
+
+                if (! $line['months'][$month]['paid']) {
+                    $unpaid += $effective;
+                }
             }
 
             foreach ($cards as $card) {
                 $expense += $card['months'][$month]['effective_cents'];
+
+                if (! $card['months'][$month]['paid']) {
+                    $unpaid += $card['months'][$month]['effective_cents'];
+                }
             }
 
             $totals[$month] = [
                 'income_cents' => $income,
                 'expense_cents' => $expense,
                 'balance_cents' => $income - $expense,
+                'unpaid_cents' => $unpaid,
             ];
         }
 

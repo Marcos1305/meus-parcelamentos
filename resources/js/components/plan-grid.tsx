@@ -23,6 +23,13 @@ const colorRoutes = {
     card: (card: number) => planRoute.cards.color(card).url,
 };
 
+const paidRoutes = {
+    line: (budgetLine: number, month: string) =>
+        planRoute.lines.paid({ budgetLine, month }).url,
+    card: (card: number, month: string) =>
+        planRoute.cards.paid({ card, month }).url,
+};
+
 const MONTH_LABEL = new Intl.DateTimeFormat('pt-BR', {
     month: 'short',
     timeZone: 'UTC',
@@ -101,14 +108,11 @@ export function PlanGrid({
                         <tr
                             key={`card-${card.id}`}
                             style={{
-                                backgroundColor: rowTint(card.color, colors),
+                                backgroundColor: rowTint(card.color),
                             }}
                         >
                             <td className={cn(STICKY, 'relative')}>
-                                <RowColorLayer
-                                    color={card.color}
-                                    colors={colors}
-                                />
+                                <RowColorLayer color={card.color} />
                                 <div className={LABEL_CELL}>
                                     <RowColorPicker
                                         url={colorRoutes.card(card.id)}
@@ -125,6 +129,7 @@ export function PlanGrid({
                                 <PlanCell
                                     key={month}
                                     url={amountRoutes.card(card.id, month)}
+                                    paidUrl={paidRoutes.card(card.id, month)}
                                     valueCents={
                                         card.months[month].effective_cents
                                     }
@@ -132,6 +137,7 @@ export function PlanGrid({
                                         card.months[month].override_cents !==
                                         null
                                     }
+                                    isPaid={card.months[month].paid}
                                     hint={
                                         card.months[month].override_cents ===
                                         null
@@ -154,14 +160,11 @@ export function PlanGrid({
                         <tr
                             key={line.id}
                             style={{
-                                backgroundColor: rowTint(line.color, colors),
+                                backgroundColor: rowTint(line.color),
                             }}
                         >
                             <td className={cn(STICKY, 'relative')}>
-                                <RowColorLayer
-                                    color={line.color}
-                                    colors={colors}
-                                />
+                                <RowColorLayer color={line.color} />
                                 <div className={LABEL_CELL}>
                                     <RowColorPicker
                                         url={colorRoutes.line(line.id)}
@@ -182,12 +185,14 @@ export function PlanGrid({
                                 <PlanCell
                                     key={month}
                                     url={amountRoutes.line(line.id, month)}
+                                    paidUrl={paidRoutes.line(line.id, month)}
                                     valueCents={
                                         line.months[month].effective_cents
                                     }
                                     isExplicit={
                                         line.months[month].amount_cents !== null
                                     }
+                                    isPaid={line.months[month].paid}
                                     hint={null}
                                     label={cellLabel(line.name, month)}
                                 />
@@ -207,7 +212,7 @@ export function PlanGrid({
                         className="bg-secondary/10"
                         style={{
                             backgroundColor: incomeLine
-                                ? rowTint(incomeLine.color, colors)
+                                ? rowTint(incomeLine.color)
                                 : undefined,
                         }}
                     >
@@ -218,10 +223,7 @@ export function PlanGrid({
                             )}
                         >
                             {incomeLine?.color ? (
-                                <RowColorLayer
-                                    color={incomeLine.color}
-                                    colors={colors}
-                                />
+                                <RowColorLayer color={incomeLine.color} />
                             ) : (
                                 <span
                                     aria-hidden="true"
@@ -248,6 +250,7 @@ export function PlanGrid({
                                         incomeLine.id,
                                         month,
                                     )}
+                                    paidUrl={null}
                                     valueCents={
                                         incomeLine.months[month].effective_cents
                                     }
@@ -255,6 +258,7 @@ export function PlanGrid({
                                         incomeLine.months[month]
                                             .amount_cents !== null
                                     }
+                                    isPaid={false}
                                     hint={null}
                                     label={cellLabel('Entrada', month)}
                                 />
@@ -308,6 +312,28 @@ export function PlanGrid({
                                 )}
                             >
                                 {formatBRL(plan.totals[month].balance_cents)}
+                            </td>
+                        ))}
+                    </tr>
+                    <tr>
+                        <td
+                            className={cn(
+                                STICKY,
+                                'relative bg-card font-semibold',
+                            )}
+                        >
+                            <span className="relative">FALTA PAGAR</span>
+                        </td>
+                        {months.map((month) => (
+                            <td
+                                key={month}
+                                className={cn(
+                                    BODY_CELL,
+                                    plan.totals[month].unpaid_cents === 0 &&
+                                        'text-muted-foreground',
+                                )}
+                            >
+                                {formatBRL(plan.totals[month].unpaid_cents)}
                             </td>
                         ))}
                     </tr>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\BudgetLineController;
 use App\Http\Controllers\HiddenMonthController;
 use App\Http\Controllers\MonthAmountController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\RowColorController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
      */
     Route::put('planejamento/linhas/{budgetLine}/cor', [RowColorController::class, 'line'])->name('plan.lines.color');
     Route::put('planejamento/cartoes/{card}/cor', [RowColorController::class, 'card'])->name('plan.cards.color');
+    Route::put('planejamento/linhas/{budgetLine}/pago/{month}', [PaymentController::class, 'line'])->name('plan.lines.paid');
+    Route::put('planejamento/cartoes/{card}/pago/{month}', [PaymentController::class, 'card'])->name('plan.cards.paid');
     Route::put('planejamento/linhas/{budgetLine}/{month}', [MonthAmountController::class, 'line'])->name('plan.lines.amount');
     Route::put('planejamento/cartoes/{card}/{month}', [MonthAmountController::class, 'card'])->name('plan.cards.amount');
 });

@@ -3,8 +3,10 @@
 use App\Actions\BuildAnnualPlan;
 use App\Models\BudgetLine;
 use App\Models\BudgetLineAmount;
+use App\Models\BudgetLinePayment;
 use App\Models\Card;
 use App\Models\CardMonthAmount;
+use App\Models\CardPayment;
 use App\Models\Installment;
 use App\Models\Purchase;
 use App\Models\User;
@@ -44,7 +46,7 @@ it('usa o padrao da linha no mes sem valor gravado', function (): void {
     $plan = planFor($user);
 
     expect($plan['lines'][0]['months']['2026-05'])
-        ->toBe(['amount_cents' => null, 'effective_cents' => 400_00]);
+        ->toBe(['amount_cents' => null, 'effective_cents' => 400_00, 'paid' => false]);
 });
 
 it('o valor gravado vence o padrao', function (): void {
@@ -55,7 +57,7 @@ it('o valor gravado vence o padrao', function (): void {
     $plan = planFor($user);
 
     expect($plan['lines'][0]['months']['2026-05'])
-        ->toBe(['amount_cents' => 573_74, 'effective_cents' => 573_74])
+        ->toBe(['amount_cents' => 573_74, 'effective_cents' => 573_74, 'paid' => false])
         ->and($plan['lines'][0]['months']['2026-06']['effective_cents'])->toBe(400_00);
 });
 
@@ -102,6 +104,7 @@ it('a correcao vence o calculado sem apagar o calculado', function (): void {
         'computed_cents' => 350_00,
         'override_cents' => 2_147_33,
         'effective_cents' => 2_147_33,
+        'paid' => false,
     ]);
 });
 
@@ -120,7 +123,7 @@ it('correcao de zero em linha de orcamento vale zero, nao volta para o padrao', 
     BudgetLineAmount::factory()->for($line)->create(['month' => '2026-05-01', 'amount_cents' => 0]);
 
     expect(planFor($user)['lines'][0]['months']['2026-05'])
-        ->toBe(['amount_cents' => 0, 'effective_cents' => 0]);
+        ->toBe(['amount_cents' => 0, 'effective_cents' => 0, 'paid' => false]);
 });
 
 it('soma entrada, saida e saldo', function (): void {
@@ -136,6 +139,7 @@ it('soma entrada, saida e saldo', function (): void {
         'income_cents' => 14_500_00,
         'expense_cents' => 1_400_00,
         'balance_cents' => 13_100_00,
+        'unpaid_cents' => 1_400_00,
     ]);
 });
 
@@ -183,13 +187,13 @@ it('ordena as linhas por posicao', function (): void {
 
 it('devolve a cor da linha e a do cartao', function (): void {
     $user = User::factory()->create();
-    BudgetLine::factory()->for($user)->expense()->create(['color' => 'verde']);
-    Card::factory()->for($user)->create(['color' => 'azul']);
+    BudgetLine::factory()->for($user)->expense()->create(['color' => '#22c55e']);
+    Card::factory()->for($user)->create(['color' => '#3b82f6']);
 
     $plan = planFor($user);
 
-    expect($plan['lines'][0]['color'])->toBe('verde')
-        ->and($plan['cards'][0]['color'])->toBe('azul');
+    expect($plan['lines'][0]['color'])->toBe('#22c55e')
+        ->and($plan['cards'][0]['color'])->toBe('#3b82f6');
 });
 
 it('devolve cor nula quando ninguem escolheu', function (): void {
@@ -201,4 +205,57 @@ it('devolve cor nula quando ninguem escolheu', function (): void {
 
     expect($plan['lines'][0]['color'])->toBeNull()
         ->and($plan['cards'][0]['color'])->toBeNull();
+});
+
+it('marca no plano o mes pago da conta e do cartao', function (): void {
+    $user = User::factory()->create();
+    $line = BudgetLine::factory()->for($user)->expense()->create();
+    $card = Card::factory()->for($user)->create();
+    BudgetLinePayment::factory()->for($line)->create(['month' => '2026-05-01']);
+    CardPayment::factory()->for($card)->create(['month' => '2026-09-01']);
+
+    $plan = planFor($user);
+
+    expect($plan['lines'][0]['months']['2026-05']['paid'])->toBeTrue()
+        ->and($plan['lines'][0]['months']['2026-06']['paid'])->toBeFalse()
+        ->and($plan['cards'][0]['months']['2026-09']['paid'])->toBeTrue()
+        ->and($plan['cards'][0]['months']['2026-10']['paid'])->toBeFalse();
+});
+
+it('o que falta pagar exclui as contas ja pagas', function (): void {
+    $user = User::factory()->create();
+    $paga = BudgetLine::factory()->for($user)->expense()->create(['default_amount_cents' => 400_00]);
+    BudgetLine::factory()->for($user)->expense()->create(['default_amount_cents' => 150_00]);
+    BudgetLinePayment::factory()->for($paga)->create(['month' => '2026-05-01']);
+
+    $totals = planFor($user)['totals']['2026-05'];
+
+    expect($totals['expense_cents'])->toBe(550_00)
+        ->and($totals['unpaid_cents'])->toBe(150_00);
+});
+
+it('o que falta pagar exclui a fatura ja paga', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+    parcelaNoCartao($card, '2026-09-10', 1_000_00);
+    CardPayment::factory()->for($card)->create(['month' => '2026-09-01']);
+
+    expect(planFor($user)['totals']['2026-09']['unpaid_cents'])->toBe(0);
+});
+
+it('a renda nao entra no que falta pagar', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->income()->create(['default_amount_cents' => 14_500_00]);
+    BudgetLine::factory()->for($user)->expense()->create(['default_amount_cents' => 400_00]);
+
+    expect(planFor($user)['totals']['2026-05']['unpaid_cents'])->toBe(400_00);
+});
+
+it('pagamento de outro usuario nao marca a minha conta', function (): void {
+    $user = User::factory()->create();
+    BudgetLine::factory()->for($user)->expense()->create();
+    $alheia = BudgetLine::factory()->for(User::factory()->create())->expense()->create();
+    BudgetLinePayment::factory()->for($alheia)->create(['month' => '2026-05-01']);
+
+    expect(planFor($user)['lines'][0]['months']['2026-05']['paid'])->toBeFalse();
 });

@@ -15,7 +15,7 @@ class RowColorController extends Controller
     public function line(UpdateRowColorRequest $request, int $budgetLine): RedirectResponse
     {
         $request->user()->budgetLines()->active()->findOrFail($budgetLine)
-            ->update(['color' => $request->validated('color')]);
+            ->update(['color' => $this->normalized($request->validated('color'))]);
 
         return back();
     }
@@ -23,8 +23,18 @@ class RowColorController extends Controller
     public function card(UpdateRowColorRequest $request, int $card): RedirectResponse
     {
         $request->user()->cards()->findOrFail($card)
-            ->update(['color' => $request->validated('color')]);
+            ->update(['color' => $this->normalized($request->validated('color'))]);
 
         return back();
+    }
+
+    /**
+     * O seletor do navegador manda minusculas, mas um hexadecimal digitado a
+     * mao pode vir em maiusculas. Guardar em caixa unica evita duas linhas
+     * com a mesma cor parecendo diferentes.
+     */
+    private function normalized(mixed $color): ?string
+    {
+        return is_string($color) ? mb_strtolower($color) : null;
     }
 }

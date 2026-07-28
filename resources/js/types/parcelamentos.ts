@@ -144,11 +144,13 @@ export type PlanCardMonth = {
     computed_cents: number;
     override_cents: number | null;
     effective_cents: number;
+    paid: boolean;
 };
 
 export type PlanLineMonth = {
     amount_cents: number | null;
     effective_cents: number;
+    paid: boolean;
 };
 
 export type PlanCardRow = {
@@ -179,6 +181,7 @@ export type PlanMonthTotals = {
     income_cents: number;
     expense_cents: number;
     balance_cents: number;
+    unpaid_cents: number;
 };
 
 export type AnnualPlan = {

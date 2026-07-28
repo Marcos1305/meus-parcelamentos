@@ -22,8 +22,6 @@ export function RowColorPicker({
     colors,
     rowName,
 }: RowColorPickerProps) {
-    const selected = colors.find((option) => option.value === color) ?? null;
-
     function choose(next: string | null) {
         router.put(
             url,
@@ -37,16 +35,12 @@ export function RowColorPicker({
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
-                    aria-label={`Cor de ${rowName}${
-                        selected ? `: ${selected.label}` : ': sem cor'
-                    }`}
+                    aria-label={`Cor de ${rowName}${color ? `: ${color}` : ': sem cor'}`}
                     className={cn(
                         'size-4 shrink-0 rounded-full border transition-transform hover:scale-110',
-                        selected ? 'border-transparent' : 'border-dashed',
+                        color ? 'border-transparent' : 'border-dashed',
                     )}
-                    style={
-                        selected ? { backgroundColor: selected.hex } : undefined
-                    }
+                    style={color ? { backgroundColor: color } : undefined}
                 />
             </DropdownMenuTrigger>
 
@@ -58,16 +52,29 @@ export function RowColorPicker({
                             type="button"
                             title={option.label}
                             aria-label={option.label}
-                            onClick={() => choose(option.value)}
+                            onClick={() => choose(option.hex)}
                             className={cn(
                                 'size-6 rounded-full transition-transform hover:scale-110',
-                                option.value === color &&
+                                option.hex === color &&
                                     'ring-2 ring-foreground ring-offset-1 ring-offset-popover',
                             )}
                             style={{ backgroundColor: option.hex }}
                         />
                     ))}
                 </div>
+
+                <DropdownMenuSeparator />
+
+                <label className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent">
+                    <input
+                        type="color"
+                        value={color ?? '#888888'}
+                        onChange={(event) => choose(event.target.value)}
+                        className="size-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                        aria-label={`Escolher outra cor para ${rowName}`}
+                    />
+                    Outra cor…
+                </label>
 
                 <DropdownMenuSeparator />
 
@@ -90,13 +97,8 @@ const ROW_TINT_ALPHA = '24';
  * O fundo da linha inteira. Devolve `undefined` sem cor escolhida, para que a
  * linha continue exatamente como era para quem não usa o recurso.
  */
-export function rowTint(
-    color: string | null,
-    colors: LineColorOption[],
-): string | undefined {
-    const selected = colors.find((option) => option.value === color);
-
-    return selected ? `${selected.hex}${ROW_TINT_ALPHA}` : undefined;
+export function rowTint(color: string | null): string | undefined {
+    return color ? `${color}${ROW_TINT_ALPHA}` : undefined;
 }
 
 /**
@@ -106,16 +108,8 @@ export function rowTint(
  * passa por baixo dela na rolagem horizontal. Por isso o tom entra como uma
  * camada por cima desse fundo, em vez de substituí-lo.
  */
-export function RowColorLayer({
-    color,
-    colors,
-}: {
-    color: string | null;
-    colors: LineColorOption[];
-}) {
-    const selected = colors.find((option) => option.value === color) ?? null;
-
-    if (selected === null) {
+export function RowColorLayer({ color }: { color: string | null }) {
+    if (color === null) {
         return null;
     }
 
@@ -124,14 +118,12 @@ export function RowColorLayer({
             <span
                 aria-hidden="true"
                 className="absolute inset-0"
-                style={{
-                    backgroundColor: `${selected.hex}${ROW_TINT_ALPHA}`,
-                }}
+                style={{ backgroundColor: `${color}${ROW_TINT_ALPHA}` }}
             />
             <span
                 aria-hidden="true"
                 className="absolute inset-y-0 left-0 w-1"
-                style={{ backgroundColor: selected.hex }}
+                style={{ backgroundColor: color }}
             />
         </>
     );
