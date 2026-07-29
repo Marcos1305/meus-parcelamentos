@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Database\Factories\CashPurchaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,21 +53,45 @@ class CashPurchase extends Model
     }
 
     /**
+     * As duas datas sao normalizadas na escrita por mutator, e nao pelo cast
+     * `immutable_date`, porque a impressao digital do indice unico compara
+     * texto. O cast padrao grava "2026-06-05 00:00:00" quando recebe um objeto
+     * de data, e a gravacao em lote da importacao grava "2026-06-05": as duas
+     * formas nunca casariam, e a duplicata passaria pelo indice em silencio —
+     * exatamente o que ele existe para impedir.
+     *
+     * `immutable_date:Y-m-d` nao resolve: um cast com formato proprio vira
+     * `immutable_custom_datetime`, que o Eloquent nao reconhece como data, e
+     * entao o ramo que formataria o valor na escrita nunca roda.
+     *
+     * @return Attribute<CarbonImmutable, string>
+     */
+    protected function purchasedAt(): Attribute
+    {
+        return $this->dateOnly();
+    }
+
+    /** @return Attribute<CarbonImmutable, string> */
+    protected function billedAt(): Attribute
+    {
+        return $this->dateOnly();
+    }
+
+    /** @return Attribute<CarbonImmutable, string> */
+    private function dateOnly(): Attribute
+    {
+        return Attribute::make(
+            get: fn (string $value): CarbonImmutable => CarbonImmutable::parse($value),
+            set: fn (mixed $value): string => CarbonImmutable::parse($value)->toDateString(),
+        );
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            /**
-             * Formato explicito, nao so 'immutable_date': o cast sem formato
-             * so trunca a hora na leitura, mas grava com hora zerada no
-             * formato completo do grammar. O indice unico de reimportacao
-             * compara string contra o insert bruto do importador, que grava
-             * so a data — sem o formato explicito as duas gravacoes divergem
-             * em string e a duplicata escapa do unico.
-             */
-            'purchased_at' => 'immutable_date:Y-m-d',
-            'billed_at' => 'immutable_date:Y-m-d',
             'amount_cents' => 'integer',
             'category' => ExpenseCategory::class,
             'category_is_manual' => 'boolean',
