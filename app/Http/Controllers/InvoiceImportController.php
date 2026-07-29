@@ -170,8 +170,9 @@ class InvoiceImportController extends Controller
         $lines = $request->validated('lines');
 
         $imported = 0;
+        $cashImported = 0;
 
-        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, $calculateFirstDueDate, $writeCashPurchases, &$imported): void {
+        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, $calculateFirstDueDate, $writeCashPurchases, &$imported, &$cashImported): void {
             $alreadyInHistory = $this->fingerprintsAlreadyInHistory(
                 $lines,
                 $import['candidates'],
@@ -208,7 +209,7 @@ class InvoiceImportController extends Controller
                 $imported++;
             }
 
-            $writeCashPurchases->handle(
+            $cashImported = $writeCashPurchases->handle(
                 $import['cash_lines'],
                 $card,
                 CarbonImmutable::parse($import['due_date']),
@@ -217,7 +218,7 @@ class InvoiceImportController extends Controller
 
         $request->session()->forget('invoice_import');
 
-        Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported));
+        Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported, $cashImported));
 
         return to_route('history.index');
     }
@@ -302,9 +303,9 @@ class InvoiceImportController extends Controller
     }
 
     /**
-     * O usuario marcou N linhas e o botao prometeu N compras. Quando a
-     * gravacao pula alguma, a mensagem precisa dizer isso em vez de comemorar
-     * um numero que nao aconteceu.
+     * O usuario marcou N linhas parceladas e o botao prometeu N compras.
+     * Quando a gravacao pula alguma, a mensagem precisa dizer isso em vez de
+     * comemorar um numero que nao aconteceu.
      *
      * Sao dois os motivos de pulo — a compra ja existia ou o candidato nao
      * chegou em estado que possa ser gravado — e a mensagem cobre os dois numa
@@ -312,18 +313,43 @@ class InvoiceImportController extends Controller
      * contador e uma combinatoria de frases para um caso que so aparece com a
      * sessao adulterada.
      *
+     * As compras a vista tem contagem propria e sempre certa: WriteCashPurchases
+     * usa insertOrIgnore, entao nao ha estado intermediario para relatar como
+     * ha para as parceladas. Elas entram na mensagem sempre que $cashImported
+     * for maior que zero — inclusive quando nenhuma parcelada foi importada,
+     * porque "nenhuma compra foi importada" seria mentira depois de gravar
+     * compras a vista, e o usuario nao teria como saber que a fatura so-a-vista
+     * funcionou.
+     *
      * @return array{type: string, message: string}
      */
-    private function importToast(int $imported, int $skipped): array
+    private function importToast(int $imported, int $skipped, int $cashImported): array
     {
         $skippedText = $skipped === 1
             ? 'ela já constava no histórico ou não pôde ser lida'
             : 'elas já constavam no histórico ou não puderam ser lidas';
 
-        if ($imported === 0) {
+        if ($imported === 0 && $cashImported === 0) {
             return [
                 'type' => 'info',
                 'message' => "Nenhuma compra foi importada: {$skippedText}.",
+            ];
+        }
+
+        $cashText = match (true) {
+            $cashImported === 0 => null,
+            $cashImported === 1 => '1 compra à vista salva para análise de gastos.',
+            default => "{$cashImported} compras à vista salvas para análise de gastos.",
+        };
+
+        if ($imported === 0) {
+            if ($skipped === 0) {
+                return ['type' => 'success', 'message' => $cashText];
+            }
+
+            return [
+                'type' => 'info',
+                'message' => "{$cashText} Nenhuma parcelada foi importada: {$skippedText}.",
             ];
         }
 
@@ -331,8 +357,10 @@ class InvoiceImportController extends Controller
             ? '1 compra importada.'
             : "{$imported} compras importadas.";
 
+        $summary = $cashText === null ? $importedText : "{$importedText} {$cashText}";
+
         if ($skipped === 0) {
-            return ['type' => 'success', 'message' => $importedText];
+            return ['type' => 'success', 'message' => $summary];
         }
 
         $ignoredText = $skipped === 1
@@ -341,7 +369,7 @@ class InvoiceImportController extends Controller
 
         return [
             'type' => 'info',
-            'message' => "{$importedText} {$ignoredText}: {$skippedText}.",
+            'message' => "{$summary} {$ignoredText}: {$skippedText}.",
         ];
     }
 

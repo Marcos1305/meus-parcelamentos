@@ -4,6 +4,7 @@ use App\Actions\GenerateInstallments;
 use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceParser;
+use App\Invoices\ParsedCashLine;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\Parsers\ItauInvoiceParser;
@@ -188,8 +189,19 @@ it('analisa a fatura e leva para a revisao', function (): void {
         'last_four_digits' => '8291',
     ]);
 
+    $invoice = new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-05-10'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990)],
+        cashLines: [
+            new ParsedCashLine('Padaria do Bairro', 5, 4, 1_990),
+            new ParsedCashLine('Posto Ipiranga', 6, 4, 31_849),
+        ],
+    );
+
     fakeExtractorReturning('texto qualquer');
-    fakeParserFor(invoiceWithOneLine());
+    fakeParserFor($invoice);
 
     $this->actingAs($user)
         ->post(route('invoice-imports.store'), [
@@ -205,7 +217,8 @@ it('analisa a fatura e leva para a revisao', function (): void {
             ->component('invoices/review')
             ->has('candidates', 1)
             ->where('candidates.0.status', 'matched')
-            ->where('candidates.0.total_amount_cents', 129_900));
+            ->where('candidates.0.total_amount_cents', 129_900)
+            ->where('cash_lines_count', 2));
 });
 
 it('nao expoe fatura de outro usuario guardada na sessao', function (): void {
@@ -412,6 +425,52 @@ it('confirma a importacao e grava as compras com as parcelas', function (): void
         ->and($purchase->installments()->count())->toBe(10)
         ->and($purchase->installments()->where('number', 3)->value('due_date'))
         ->toEqual(CarbonImmutable::parse('2026-05-10'));
+});
+
+/**
+ * De ponta a ponta: o parser produz ParsedCashLine, store() mapeia para o
+ * array que vai na sessao, review() e confirm() leem essa mesma sessao de
+ * volta. E o unico teste que prova que o mapa de store(), o isCashLine() de
+ * importFromSession() e WriteCashPurchases concordam sobre a forma dos
+ * dados — os outros testes de compra a vista montam a sessao a mao e nao
+ * exercitam o mapeamento de verdade.
+ */
+it('leva a compra a vista do parser ate a gravacao final', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $invoice = new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-07-10'),
+        lastFourDigits: '8291',
+        lines: [],
+        cashLines: [
+            new ParsedCashLine('Padaria do Bairro', 5, 6, 1_990),
+        ],
+    );
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor($invoice);
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('invoice-imports.confirm'), ['lines' => []])
+        ->assertRedirect(route('history.index'));
+
+    $cashPurchase = CashPurchase::sole();
+
+    expect($cashPurchase->card_id)->toBe($card->id)
+        ->and($cashPurchase->description)->toBe('Padaria do Bairro')
+        ->and($cashPurchase->amount_cents)->toBe(1_990)
+        ->and($cashPurchase->purchased_at->toDateString())->toBe('2026-06-05')
+        ->and($cashPurchase->billed_at->toDateString())->toBe('2026-07-10');
 });
 
 it('respeita a data corrigida na revisao', function (): void {
@@ -921,6 +980,100 @@ it('anuncia sucesso quando todas as compras marcadas foram importadas', function
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
 });
 
+it('nao diz que nada foi importado quando ha compras a vista gravadas', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->withSession(['invoice_import' => [
+        'card_id' => $card->id,
+        'issuer' => 'Nubank',
+        'due_date' => '2026-07-10',
+        'candidates' => [],
+        'cash_lines' => [
+            ['description' => 'Padaria do Bairro', 'day' => 5, 'month' => 6, 'amount_cents' => 1_990],
+        ],
+    ]]);
+
+    $this->post(route('invoice-imports.confirm'), ['lines' => []])
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            '1 compra à vista salva para análise de gastos.',
+        )
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+});
+
+it('menciona a contagem de compras a vista numa fatura mista', function (): void {
+    $user = User::factory()->create();
+    Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    $invoice = new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-05-10'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990)],
+        cashLines: [
+            new ParsedCashLine('Padaria do Bairro', 5, 4, 1_990),
+            new ParsedCashLine('Posto Ipiranga', 6, 4, 31_849),
+        ],
+    );
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor($invoice);
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ])->assertSessionHas(
+        'inertia.flash_data.toast.message',
+        '1 compra importada. 2 compras à vista salvas para análise de gastos.',
+    );
+});
+
+it('continua avisando a parcelada pulada mesmo com compras a vista gravadas', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create([
+        'closing_day' => 3,
+        'due_day' => 10,
+        'last_four_digits' => '8291',
+    ]);
+
+    importedPurchase($card, '2026-03-02');
+
+    $invoice = new ParsedInvoice(
+        issuer: 'Nubank',
+        dueDate: CarbonImmutable::parse('2026-05-10'),
+        lastFourDigits: '8291',
+        lines: [new ParsedInvoiceLine('MERCADOLIVRE*ABC', 'Mercado Livre', 2, 3, 10, 12_990)],
+        cashLines: [
+            new ParsedCashLine('Padaria do Bairro', 5, 4, 1_990),
+        ],
+    );
+
+    fakeExtractorReturning('texto qualquer');
+    fakeParserFor($invoice);
+
+    $this->actingAs($user)->post(route('invoice-imports.store'), [
+        'invoice' => UploadedFile::fake()->create('fatura.pdf', 40, 'application/pdf'),
+    ]);
+
+    $this->actingAs($user)->post(route('invoice-imports.confirm'), [
+        'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
+    ])->assertSessionHas(
+        'inertia.flash_data.toast.message',
+        '1 compra à vista salva para análise de gastos. Nenhuma parcelada foi importada: ela já constava no histórico ou não pôde ser lida.',
+    );
+
+    expect(Purchase::count())->toBe(1)
+        ->and(CashPurchase::count())->toBe(1);
+});
+
 it('corrige a data de um candidato divergente e importa com ela', function (): void {
     $user = User::factory()->create();
     Card::factory()->for($user)->create([
@@ -1300,7 +1453,9 @@ it('nao duplica as compras a vista ao reimportar a mesma fatura', function (): v
     ]];
 
     $this->actingAs($user)->withSession($session)->post(route('invoice-imports.confirm'), ['lines' => []]);
-    $this->actingAs($user)->withSession($session)->post(route('invoice-imports.confirm'), ['lines' => []]);
+    $this->actingAs($user)->withSession($session)
+        ->post(route('invoice-imports.confirm'), ['lines' => []])
+        ->assertRedirect(route('history.index'));
 
     expect(CashPurchase::query()->count())->toBe(1);
 });
