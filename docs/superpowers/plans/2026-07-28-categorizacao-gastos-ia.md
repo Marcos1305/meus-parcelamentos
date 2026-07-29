@@ -981,6 +981,40 @@ it('recusa duas compras identicas no mesmo cartao e dia', function (): void {
     expect(CashPurchase::query()->count())->toBe(1);
 });
 
+it('grava a data como data pura mesmo recebendo um objeto de data', function (): void {
+    $cash = CashPurchase::factory()->create([
+        'purchased_at' => CarbonImmutable::parse('2026-06-05 14:32:10'),
+        'billed_at' => CarbonImmutable::parse('2026-07-10 09:00:00'),
+    ]);
+
+    $raw = DB::table('cash_purchases')->where('id', $cash->id)->first();
+
+    expect($raw->purchased_at)->toBe('2026-06-05')
+        ->and($raw->billed_at)->toBe('2026-07-10')
+        ->and($cash->fresh()->purchased_at)->toBeInstanceOf(CarbonImmutable::class);
+});
+
+it('recusa duplicata quando a primeira compra veio de um objeto de data', function (): void {
+    $first = CashPurchase::factory()->create([
+        'description' => 'Padaria do Bairro',
+        'amount_cents' => 1_990,
+        'purchased_at' => CarbonImmutable::parse('2026-06-05 14:32:10'),
+    ]);
+
+    DB::table('cash_purchases')->insertOrIgnore([[
+        'card_id' => $first->card_id,
+        'description' => 'Padaria do Bairro',
+        'amount_cents' => 1_990,
+        'purchased_at' => '2026-06-05',
+        'billed_at' => '2026-07-10',
+        'category_is_manual' => false,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]]);
+
+    expect(CashPurchase::query()->count())->toBe(1);
+});
+
 it('so enxerga as compras dos cartoes do proprio usuario', function (): void {
     $user = User::factory()->create();
     $mine = CashPurchase::factory()->forUser($user)->create();
@@ -1129,13 +1163,45 @@ class CashPurchase extends Model
     }
 
     /**
+     * As duas datas sao normalizadas na escrita por mutator, e nao pelo cast
+     * `immutable_date`, porque a impressao digital do indice unico compara
+     * texto. O cast padrao grava "2026-06-05 00:00:00" quando recebe um objeto
+     * de data, e a gravacao em lote da importacao grava "2026-06-05": as duas
+     * formas nunca casariam, e a duplicata passaria pelo indice em silencio —
+     * exatamente o que ele existe para impedir.
+     *
+     * `immutable_date:Y-m-d` nao resolve: um cast com formato proprio vira
+     * `immutable_custom_datetime`, que o Eloquent nao reconhece como data, e
+     * entao o ramo que formataria o valor na escrita nunca roda.
+     *
+     * @return Attribute<CarbonImmutable, string>
+     */
+    protected function purchasedAt(): Attribute
+    {
+        return $this->dateOnly();
+    }
+
+    /** @return Attribute<CarbonImmutable, string> */
+    protected function billedAt(): Attribute
+    {
+        return $this->dateOnly();
+    }
+
+    /** @return Attribute<CarbonImmutable, string> */
+    private function dateOnly(): Attribute
+    {
+        return Attribute::make(
+            get: fn (string $value): CarbonImmutable => CarbonImmutable::parse($value),
+            set: fn (mixed $value): string => CarbonImmutable::parse($value)->toDateString(),
+        );
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'purchased_at' => 'immutable_date',
-            'billed_at' => 'immutable_date',
             'amount_cents' => 'integer',
             'category' => ExpenseCategory::class,
             'category_is_manual' => 'boolean',
@@ -1143,6 +1209,8 @@ class CashPurchase extends Model
     }
 }
 ```
+
+> `Attribute` já é usado no projeto (`Installment::status`), então o padrão não é novo. Os dois mutators delegam a um helper privado em vez de repetir o mesmo corpo duas vezes.
 
 - [ ] **Step 7: Criar a fábrica**
 
