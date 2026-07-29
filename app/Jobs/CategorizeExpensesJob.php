@@ -12,6 +12,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Queue\Queueable;
 use Laravel\Ai\Responses\StructuredAgentResponse;
+use LogicException;
 
 /**
  * O job varre tudo que esta sem categoria em vez de receber a lista de ids da
@@ -114,12 +115,26 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
          * StructuredAgentResponse (ver GeneratesText::prompt() no pacote),
          * que estende AgentResponse e implementa ArrayAccess — mas isso nao
          * esta no tipo declarado. A checagem aqui e o que torna o acesso por
-         * indice seguro de verdade, nao um jeito de calar o phpstan: se um
-         * dia o agente parar de ser estruturado, o lote e pulado em vez de
-         * estourar em um offset que nao existe.
+         * indice seguro de verdade, nao um jeito de calar o phpstan.
+         *
+         * Chegar aqui significa que CategorizeExpenses parou de implementar
+         * HasStructuredOutput (configuracao/codigo trocado), nao que o modelo
+         * respondeu errado — o schema estruturado e quem garante a forma da
+         * resposta, entao um retorno nao-estruturado nunca vem do provedor,
+         * so de uma mudanca no agente. Lanca em vez de sair em silencio: o
+         * lote inteiro ja seria abandonado de um jeito ou de outro (nao ha
+         * item para reconciliar sem a lista de items), entao nao ha escrita
+         * parcial para proteger com um retorno mudo. O job tem tries/backoff
+         * e cai em failed_jobs se as tentativas se esgotarem — um `return`
+         * aqui faria a fila registrar sucesso a cada rodada enquanto o lote
+         * nunca ganha categoria, sem log nem sintoma.
          */
         if (! $response instanceof StructuredAgentResponse) {
-            return;
+            throw new LogicException(sprintf(
+                'CategorizeExpenses deveria devolver StructuredAgentResponse (agente com HasStructuredOutput), mas devolveu %s para o usuario %d.',
+                $response::class,
+                $this->userId,
+            ));
         }
 
         foreach ($response['items'] ?? [] as $item) {
