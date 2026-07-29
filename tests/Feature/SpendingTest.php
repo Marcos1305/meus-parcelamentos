@@ -29,7 +29,7 @@ it('mostra a tela de gastos', function (): void {
             ->has('breakdown.categories', 1)
             ->where('breakdown.categories.0.category', 'mercado')
             ->has('breakdown.months', 12)
-            ->has('categories', 12));
+            ->has('categories', 13));
 });
 
 it('cai no mes corrente quando o mes da url nao existe', function (string $mes): void {

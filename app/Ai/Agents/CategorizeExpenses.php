@@ -41,8 +41,15 @@ class CategorizeExpenses implements Agent, HasProviderOptions, HasStructuredOutp
         Regras:
         - Responda um item para cada número recebido, na mesma numeração.
         - Use exatamente os valores de categoria listados acima.
-        - Quando a descrição não permitir identificar o tipo de gasto com
-          razoável confiança, use "outros". Não adivinhe.
+        - Nome de estabelecimento abreviado ou truncado é a forma normal numa
+          fatura brasileira, não uma exceção: se o nome for reconhecível
+          mesmo assim — pelo ramo que ele indica, mesmo faltando letras ou
+          fundido com outra palavra —, decida a categoria por ele. Não exija
+          o nome completo nem grafia perfeita.
+        - Use "outros" só quando não houver nenhuma pista de ramo: a
+          descrição é puro código de adquirente, um número, ou um nome de
+          pessoa física solto, sem qualquer palavra que aponte para um tipo
+          de gasto. Nesse caso não adivinhe.
         INSTRUCTIONS;
     }
 

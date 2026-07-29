@@ -37,10 +37,32 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
     public array $backoff = [10, 60];
 
     /**
-     * Um modelo local classificando 40 descricoes leva bem mais que o padrao
-     * de 60 segundos.
+     * Tempo maximo de um lote de prompt() ao provedor, em segundos. Medido
+     * contra o Ollama real: 10 itens com o modelo frio (subindo os 9,6GB na
+     * memoria) levaram 90,8s; extrapolando o custo por item dos lotes quentes
+     * (20 itens = 23,7s, 40 itens = 28,0s, ou seja ~19s fixos + ~0,22s/item),
+     * 10 itens quentes ficariam perto de 21,5s — o que isola o custo de
+     * carregar o modelo em ~69s. Pior caso de um lote cheio (BATCH=40) frio:
+     * ~69s de carga + ~28s de geracao ~= 97s. Dobrado como margem de
+     * seguranca contra variacao de hardware/rede: ~194s, arredondado para
+     * 200s. Sem isso o cliente HTTP do gateway Ollama cai no padrao de 60s e
+     * falha em qualquer partida a frio, que e a normalidade (o Ollama
+     * descarrega o modelo depois de ocioso, e importar fatura e mensal).
      */
-    public int $timeout = 600;
+    private const PROMPT_TIMEOUT_SECONDS = 200;
+
+    /**
+     * Teto do job inteiro (todos os lotes de handle(), nao so um prompt()).
+     * No caminho normal so o primeiro lote de uma varredura fica frio (os
+     * demais rodam em sequencia com o modelo ja quente), entao o total fica
+     * bem abaixo disto. Mas o pior caso pessimista — o keep_alive do Ollama
+     * expirando entre lotes e cada um deles caindo frio de novo — cobre ate
+     * sete lotes (154 compras a vista / 40 = 4, mais 83 parceladas / 40 = 3)
+     * a ~100s cada (arredondando o pior caso de PROMPT_TIMEOUT_SECONDS acima
+     * pra baixo do teto de seguranca) = ~700s, que ja estourava o teto antigo
+     * de 600s. 900s da folga sobre esse pior caso pessimista.
+     */
+    public int $timeout = 900;
 
     public function __construct(public int $userId) {}
 
@@ -53,7 +75,10 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
      * O prazo existe para o bloqueio se curar sozinho se o worker morrer
      * (OOM, deploy, etc.) antes de liberar o lock: sem prazo, o cache trata
      * zero como "nunca expira", e a categorizacao daquele usuario ficaria
-     * travada para sempre, sem erro nem log. 600 do timeout mais folga.
+     * travada para sempre, sem erro nem log. 900 do timeout do job mais
+     * folga: precisa ser maior que $timeout, senao o bloqueio expiraria
+     * antes do proprio job, permitindo um segundo despacho enquanto o
+     * primeiro ainda roda.
      *
      * Precisa ser metodo, nao propriedade: o framework le o bloqueio via
      * `method_exists($job, 'uniqueFor')`, e uma propriedade publica do mesmo
@@ -61,7 +86,7 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
      */
     public function uniqueFor(): int
     {
-        return 660;
+        return 960;
     }
 
     public function handle(): void
@@ -107,7 +132,7 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
             ->map(fn (CashPurchase|Purchase $row, int $index): string => ($index + 1).'. '.$row->description)
             ->implode("\n");
 
-        $response = new CategorizeExpenses()->prompt($list);
+        $response = new CategorizeExpenses()->prompt($list, timeout: self::PROMPT_TIMEOUT_SECONDS);
 
         /**
          * `prompt()` declara devolver AgentResponse, que nao e acessivel como

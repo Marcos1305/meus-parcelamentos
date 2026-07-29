@@ -2,15 +2,15 @@
 
 use App\Enums\ExpenseCategory;
 
-it('tem doze categorias', function (): void {
-    expect(ExpenseCategory::cases())->toHaveCount(12);
+it('tem treze categorias', function (): void {
+    expect(ExpenseCategory::cases())->toHaveCount(13);
 });
 
 it('expoe os valores como lista de string', function (): void {
     expect(ExpenseCategory::values())
         ->toBeArray()
-        ->toContain('mercado', 'outros')
-        ->toHaveCount(12);
+        ->toContain('mercado', 'marketplace', 'outros')
+        ->toHaveCount(13);
 });
 
 it('da rotulo, dica e cor a cada categoria', function (): void {
@@ -27,5 +27,5 @@ it('nao repete cor entre categorias', function (): void {
         ExpenseCategory::cases(),
     );
 
-    expect(array_unique($colors))->toHaveCount(12);
+    expect(array_unique($colors))->toHaveCount(13);
 });

@@ -149,6 +149,10 @@ it('nao enfileira duas vezes para o mesmo usuario enquanto a primeira nao proces
 it('define um prazo para o bloqueio de unicidade se curar sozinho', function (): void {
     // Zero (o padrao sem uniqueFor) e "nunca expira" para o Lock: um worker
     // morto antes de liberar o lock travaria a categorizacao do usuario para
-    // sempre. Precisa ser maior que o timeout do job (600s).
-    expect(new CategorizeExpensesJob(1)->uniqueFor())->toBeGreaterThan(600);
+    // sempre. Precisa ser maior que o timeout do proprio job, senao o
+    // bloqueio expira antes do job e libera um segundo despacho em cima do
+    // primeiro ainda rodando.
+    $job = new CategorizeExpensesJob(1);
+
+    expect($job->uniqueFor())->toBeGreaterThan($job->timeout);
 });
