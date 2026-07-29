@@ -2108,12 +2108,21 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
     public function __construct(public int $userId) {}
 
     /**
-     * O bloqueio precisa de prazo. Sem `uniqueFor` ele nunca expira, e um
-     * worker morto antes de liberar deixaria a categorizacao deste usuario
-     * bloqueada para sempre — sem erro, sem log, sem sintoma alem de nada
-     * ganhar categoria nunca mais.
+     * O bloqueio precisa de prazo. Sem ele o lock nasce com zero, que toda
+     * implementacao de Lock trata como "nunca expira": um worker morto antes
+     * de liberar deixaria a categorizacao deste usuario bloqueada para
+     * sempre — sem erro, sem log, sem sintoma alem de nada ganhar categoria
+     * nunca mais.
+     *
+     * Tem que ser metodo ou o atributo #[UniqueFor]. Uma propriedade simples
+     * `public int $uniqueFor` e ignorada em silencio: UniqueLock::acquire()
+     * testa `method_exists()` e, no fallback, le o atributo — nunca a
+     * propriedade.
      */
-    public int $uniqueFor = 660;
+    public function uniqueFor(): int
+    {
+        return $this->timeout + 60;
+    }
 
     public function uniqueId(): string
     {
