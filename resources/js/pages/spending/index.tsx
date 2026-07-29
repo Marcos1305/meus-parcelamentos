@@ -98,175 +98,177 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     </div>
                 </div>
 
-                {entries.length === 0 ? (
+                {entries.length === 0 && (
                     <EmptyState
                         title="Nenhum gasto neste mês"
                         description="A análise por categoria começa depois da primeira importação de fatura."
                     />
-                ) : (
-                    <>
-                        {uncategorizedCount > 0 && (
-                            <Alert>
-                                <AlertTitle>
-                                    {uncategorizedCount === 1
-                                        ? '1 gasto sem categoria'
-                                        : `${uncategorizedCount} gastos sem categoria`}
-                                </AlertTitle>
-                                <AlertDescription>
-                                    <p>
-                                        Classifique manualmente na lista abaixo
-                                        ou deixe a IA sugerir uma categoria para
-                                        cada um.
-                                    </p>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={categorizeAutomatically}
-                                    >
-                                        Categorizar automaticamente
-                                    </Button>
-                                </AlertDescription>
-                            </Alert>
-                        )}
+                )}
 
-                        <div className="grid gap-4 lg:grid-cols-2">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Gastos por categoria</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    {breakdown.categories.length === 0 ? (
-                                        <p className="text-sm text-muted-foreground">
-                                            Nenhum gasto categorizado neste mês
-                                            ainda.
-                                        </p>
-                                    ) : (
-                                        <CategoryBreakdownChart
-                                            categories={breakdown.categories}
-                                        />
-                                    )}
-                                </CardContent>
-                            </Card>
+                {entries.length > 0 && uncategorizedCount > 0 && (
+                    <Alert>
+                        <AlertTitle>
+                            {uncategorizedCount === 1
+                                ? '1 gasto sem categoria'
+                                : `${uncategorizedCount} gastos sem categoria`}
+                        </AlertTitle>
+                        <AlertDescription>
+                            <p>
+                                Classifique manualmente na lista abaixo ou deixe
+                                a IA sugerir uma categoria para cada um.
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={categorizeAutomatically}
+                            >
+                                Categorizar automaticamente
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                )}
 
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Últimos 12 meses</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <CategoryTrendChart
-                                        months={breakdown.months}
-                                        categories={categories}
-                                    />
-                                </CardContent>
-                            </Card>
-                        </div>
-
+                {/*
+                    A série de 12 meses independe do mês selecionado ter
+                    gastos: é o único contexto que continua verdadeiro num mês
+                    vazio, então fica fora do ramo do estado vazio.
+                */}
+                <div
+                    className={
+                        entries.length > 0 ? 'grid gap-4 lg:grid-cols-2' : ''
+                    }
+                >
+                    {entries.length > 0 && (
                         <Card>
-                            <CardContent className="overflow-x-auto p-0">
-                                <table className="w-full text-sm">
-                                    <thead className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                        <tr>
-                                            <th className="p-3">Descrição</th>
-                                            <th className="p-3">Cartão</th>
-                                            <th className="p-3">Data</th>
-                                            <th className="p-3">Valor</th>
-                                            <th className="p-3">Categoria</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                        {entries.map((entry) => (
-                                            <tr
-                                                key={`${entry.kind}-${entry.id}-${entry.installment_label ?? 'unico'}`}
-                                            >
-                                                <td className="p-3">
-                                                    <p className="font-medium">
-                                                        {entry.description}
-                                                    </p>
-                                                    {entry.installment_label && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Parcela{' '}
-                                                            {
-                                                                entry.installment_label
-                                                            }
-                                                        </p>
-                                                    )}
-                                                </td>
-                                                <td className="p-3">
-                                                    {entry.card_name}
-                                                </td>
-                                                <td className="p-3 tabular-nums">
-                                                    {formatDate(
-                                                        entry.purchased_at,
-                                                    )}
-                                                </td>
-                                                <td className="p-3 tabular-nums">
-                                                    {formatBRL(
-                                                        entry.amount_cents,
-                                                    )}
-                                                </td>
-                                                <td className="p-3">
-                                                    <Select
-                                                        value={
-                                                            entry.category ??
-                                                            NO_CATEGORY
-                                                        }
-                                                        onValueChange={(
-                                                            value,
-                                                        ) =>
-                                                            changeCategory(
-                                                                entry,
-                                                                value,
-                                                            )
-                                                        }
-                                                    >
-                                                        <SelectTrigger
-                                                            size="sm"
-                                                            className="w-44"
-                                                        >
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem
-                                                                value={
-                                                                    NO_CATEGORY
-                                                                }
-                                                            >
-                                                                Sem categoria
-                                                            </SelectItem>
-                                                            {categories.map(
-                                                                (category) => (
-                                                                    <SelectItem
-                                                                        key={
-                                                                            category.value
-                                                                        }
-                                                                        value={
-                                                                            category.value
-                                                                        }
-                                                                    >
-                                                                        <span
-                                                                            aria-hidden="true"
-                                                                            className="size-2.5 shrink-0 rounded-full"
-                                                                            style={{
-                                                                                backgroundColor:
-                                                                                    category.color,
-                                                                            }}
-                                                                        />
-                                                                        {
-                                                                            category.label
-                                                                        }
-                                                                    </SelectItem>
-                                                                ),
-                                                            )}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <CardHeader>
+                                <CardTitle>Gastos por categoria</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {breakdown.categories.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        Nenhum gasto categorizado neste mês
+                                        ainda.
+                                    </p>
+                                ) : (
+                                    <CategoryBreakdownChart
+                                        categories={breakdown.categories}
+                                    />
+                                )}
                             </CardContent>
                         </Card>
-                    </>
+                    )}
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Últimos 12 meses</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <CategoryTrendChart
+                                months={breakdown.months}
+                                categories={categories}
+                            />
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {entries.length > 0 && (
+                    <Card>
+                        <CardContent className="overflow-x-auto p-0">
+                            <table className="w-full text-sm">
+                                <thead className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
+                                    <tr>
+                                        <th className="p-3">Descrição</th>
+                                        <th className="p-3">Cartão</th>
+                                        <th className="p-3">Data</th>
+                                        <th className="p-3">Valor</th>
+                                        <th className="p-3">Categoria</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {entries.map((entry) => (
+                                        <tr
+                                            key={`${entry.kind}-${entry.id}-${entry.installment_label ?? 'unico'}`}
+                                        >
+                                            <td className="p-3">
+                                                <p className="font-medium">
+                                                    {entry.description}
+                                                </p>
+                                                {entry.installment_label && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Parcela{' '}
+                                                        {
+                                                            entry.installment_label
+                                                        }
+                                                    </p>
+                                                )}
+                                            </td>
+                                            <td className="p-3">
+                                                {entry.card_name}
+                                            </td>
+                                            <td className="p-3 tabular-nums">
+                                                {formatDate(entry.purchased_at)}
+                                            </td>
+                                            <td className="p-3 tabular-nums">
+                                                {formatBRL(entry.amount_cents)}
+                                            </td>
+                                            <td className="p-3">
+                                                <Select
+                                                    value={
+                                                        entry.category ??
+                                                        NO_CATEGORY
+                                                    }
+                                                    onValueChange={(value) =>
+                                                        changeCategory(
+                                                            entry,
+                                                            value,
+                                                        )
+                                                    }
+                                                >
+                                                    <SelectTrigger
+                                                        size="sm"
+                                                        className="w-44"
+                                                    >
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem
+                                                            value={NO_CATEGORY}
+                                                        >
+                                                            Sem categoria
+                                                        </SelectItem>
+                                                        {categories.map(
+                                                            (category) => (
+                                                                <SelectItem
+                                                                    key={
+                                                                        category.value
+                                                                    }
+                                                                    value={
+                                                                        category.value
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        aria-hidden="true"
+                                                                        className="size-2.5 shrink-0 rounded-full"
+                                                                        style={{
+                                                                            backgroundColor:
+                                                                                category.color,
+                                                                        }}
+                                                                    />
+                                                                    {
+                                                                        category.label
+                                                                    }
+                                                                </SelectItem>
+                                                            ),
+                                                        )}
+                                                    </SelectContent>
+                                                </Select>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </CardContent>
+                    </Card>
                 )}
             </div>
         </>

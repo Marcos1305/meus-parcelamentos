@@ -106,7 +106,7 @@ export function CategoryBreakdownChart({
             <BarChart
                 data={categories}
                 layout="vertical"
-                margin={{ top: 4, right: rightMargin, bottom: 4, left: 160 }}
+                margin={{ top: 4, right: rightMargin, bottom: 4, left: 0 }}
                 accessibilityLayer
                 barCategoryGap={8}
             >

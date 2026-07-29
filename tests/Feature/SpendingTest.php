@@ -16,13 +16,18 @@ it('exige login', function (): void {
 
 it('mostra a tela de gastos', function (): void {
     $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => CarbonImmutable::now(),
+    ]);
 
     $this->actingAs($user)
         ->get(route('spending.index'))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('spending/index')
-            ->has('breakdown.categories')
+            ->has('breakdown.categories', 1)
+            ->where('breakdown.categories.0.category', 'mercado')
             ->has('breakdown.months', 12)
             ->has('categories', 12));
 });
@@ -34,6 +39,14 @@ it('cai no mes corrente quando o mes da url nao existe', function (string $mes):
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->where('breakdown.month', CarbonImmutable::now()->format('Y-m')));
 })->with(['2026-13', '2026-00', '9999-99', 'nao-e-mes', '2026-1', '']);
+
+it('usa o mes informado na url quando ele e valido', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('spending.index', ['mes' => '2026-03']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.month', '2026-03'));
+});
 
 it('troca a categoria de uma compra a vista e marca como manual', function (): void {
     $user = User::factory()->create();

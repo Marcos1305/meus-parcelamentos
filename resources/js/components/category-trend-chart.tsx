@@ -5,8 +5,9 @@ import {
     ResponsiveContainer,
     Tooltip,
     XAxis,
+    YAxis,
 } from 'recharts';
-import { formatBRL, formatMonthLabel } from '@/lib/currency';
+import { formatBRL, formatBRLCompact, formatMonthLabel } from '@/lib/currency';
 import type { ExpenseCategoryOption, SpendingMonthTotals } from '@/types';
 
 type TrendPoint = { month: string; label: string } & Record<
@@ -17,12 +18,10 @@ type TrendPoint = { month: string; label: string } & Record<
 function TrendTooltip({
     active,
     payload,
-    label,
     categories,
 }: {
     active?: boolean;
-    payload?: { dataKey: string; value: number }[];
-    label?: string;
+    payload?: { dataKey: string; value: number; payload: TrendPoint }[];
     categories: ExpenseCategoryOption[];
 }) {
     if (!active || !payload?.length) {
@@ -39,7 +38,9 @@ function TrendTooltip({
 
     return (
         <div className="rounded-lg border bg-background px-3 py-2 text-sm shadow-sm">
-            <p className="mb-1 font-medium capitalize">{label}</p>
+            <p className="mb-1 font-medium capitalize">
+                {formatMonthLabel(payload[0].payload.month)}
+            </p>
             <dl className="space-y-0.5">
                 {rows.map((entry) => {
                     const category = categories.find(
@@ -102,15 +103,40 @@ export function CategoryTrendChart({
     months: SpendingMonthTotals[];
     categories: ExpenseCategoryOption[];
 }) {
-    const data: TrendPoint[] = months.map((row) => ({
-        month: row.month,
-        label: formatMonthLabel(row.month).split(' de ')[0],
-        ...categories.reduce<Record<string, number>>((acc, category) => {
-            acc[category.value] = row.totals[category.value] ?? 0;
+    const data: TrendPoint[] = months.map((row) => {
+        const [year, monthNumber] = row.month.split('-');
+        const shortLabel = formatMonthLabel(row.month).split(' de ')[0];
 
-            return acc;
-        }, {}),
-    }));
+        return {
+            month: row.month,
+            // Doze meses sempre cruzam um ano; sem isso, janeiro do ano
+            // anterior e janeiro do ano corrente ficam com o mesmo texto.
+            label: monthNumber === '01' ? `${shortLabel}/${year}` : shortLabel,
+            ...categories.reduce<Record<string, number>>((acc, category) => {
+                acc[category.value] = row.totals[category.value] ?? 0;
+
+                return acc;
+            }, {}),
+        };
+    });
+
+    const maxStackTotal = Math.max(
+        1,
+        ...data.map((point) =>
+            categories.reduce(
+                (sum, category) => sum + (Number(point[category.value]) || 0),
+                0,
+            ),
+        ),
+    );
+    /**
+     * Mesma heurística do gráfico de categorias: a largura do eixo vem do
+     * maior rótulo que ele vai precisar desenhar, não de um número fixo.
+     */
+    const yAxisWidth = Math.max(
+        48,
+        formatBRLCompact(maxStackTotal).length * 7 + 8,
+    );
 
     return (
         <div>
@@ -124,6 +150,17 @@ export function CategoryTrendChart({
                         tickMargin={8}
                         stroke="var(--muted-foreground)"
                         fontSize={12}
+                    />
+                    <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickMargin={8}
+                        width={yAxisWidth}
+                        stroke="var(--muted-foreground)"
+                        fontSize={12}
+                        tickFormatter={(value: number) =>
+                            formatBRLCompact(value)
+                        }
                     />
                     <Tooltip
                         cursor={{ fill: 'var(--accent)' }}
