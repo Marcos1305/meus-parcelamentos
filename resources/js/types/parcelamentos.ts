@@ -58,6 +58,44 @@ export type MonthlyProjectionRow = {
     total_cents: number;
 };
 
+export type ExpenseCategoryOption = {
+    value: string;
+    label: string;
+    color: string;
+};
+
+export type SpendingCategoryTotal = {
+    category: string;
+    label: string;
+    color: string;
+    total_cents: number;
+};
+
+export type SpendingMonthTotals = {
+    month: string;
+    totals: Record<string, number>;
+};
+
+export type SpendingEntry = {
+    id: number;
+    kind: 'cash' | 'purchase';
+    description: string;
+    amount_cents: number;
+    purchased_at: string;
+    installment_label: string | null;
+    category: string | null;
+    category_is_manual: boolean;
+    card_name: string;
+};
+
+export type SpendingBreakdown = {
+    month: string;
+    categories: SpendingCategoryTotal[];
+    months: SpendingMonthTotals[];
+    entries: SpendingEntry[];
+    uncategorized_count: number;
+};
+
 export type DashboardSummary = {
     cards_count: number;
     open_installments_count: number;

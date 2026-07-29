@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
     CalendarRange,
+    ChartPie,
     CreditCard,
     FileUp,
     FolderGit2,
@@ -29,6 +30,7 @@ import cards from '@/routes/cards';
 import history from '@/routes/history';
 import plan from '@/routes/plan';
 import purchases from '@/routes/purchases';
+import spending from '@/routes/spending';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -51,6 +53,11 @@ const mainNavItems: NavItem[] = [
         title: 'Histórico',
         href: history.index(),
         icon: HistoryIcon,
+    },
+    {
+        title: 'Gastos',
+        href: spending.index(),
+        icon: ChartPie,
     },
 ];
 

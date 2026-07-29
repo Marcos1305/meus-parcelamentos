@@ -6,11 +6,34 @@ use App\Models\Card;
 use App\Models\CashPurchase;
 use App\Models\Purchase;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia;
 
 it('exige login', function (): void {
     $this->get(route('spending.index'))->assertRedirect(route('login'));
 });
+
+it('mostra a tela de gastos', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('spending.index'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('spending/index')
+            ->has('breakdown.categories')
+            ->has('breakdown.months', 12)
+            ->has('categories', 12));
+});
+
+it('cai no mes corrente quando o mes da url nao existe', function (string $mes): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('spending.index', ['mes' => $mes]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.month', CarbonImmutable::now()->format('Y-m')));
+})->with(['2026-13', '2026-00', '9999-99', 'nao-e-mes', '2026-1', '']);
 
 it('troca a categoria de uma compra a vista e marca como manual', function (): void {
     $user = User::factory()->create();
