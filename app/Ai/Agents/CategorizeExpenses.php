@@ -67,7 +67,7 @@ class CategorizeExpenses implements Agent, HasProviderOptions, HasStructuredOutp
 
     /**
      * O gemma4 tem modo de raciocinio. Numa tarefa de classificacao ele so
-     * custa tokens, e o gateway do Ollama iça a chave "think" para o topo do
+     * custa tokens, e o gateway do Ollama sobe a chave "think" para o topo do
      * corpo da requisicao.
      *
      * O parametro chega como string do driver, nao como Lab: comparar contra o
