@@ -2,7 +2,9 @@
 
 use App\Enums\ExpenseCategory;
 use App\Jobs\CategorizeExpensesJob;
+use App\Models\Card;
 use App\Models\CashPurchase;
+use App\Models\Purchase;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
@@ -48,6 +50,27 @@ it('enfileira a recategorizacao', function (): void {
         ->assertRedirect();
 
     Queue::assertPushed(CategorizeExpensesJob::class);
+});
+
+it('troca a categoria de uma compra parcelada', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+    $purchase = Purchase::factory()->for($card)->create(['category' => null]);
+
+    $this->actingAs($user)
+        ->patch(route('spending.purchase-category', $purchase), ['category' => 'casa'])
+        ->assertRedirect();
+
+    expect($purchase->fresh()->category)->toBe(ExpenseCategory::Casa)
+        ->and($purchase->fresh()->category_is_manual)->toBeTrue();
+});
+
+it('nao deixa editar categoria de compra parcelada alheia', function (): void {
+    $other = Purchase::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->patch(route('spending.purchase-category', $other), ['category' => 'casa'])
+        ->assertForbidden();
 });
 
 it('limpa a categoria e desmarca como manual quando category e null', function (): void {

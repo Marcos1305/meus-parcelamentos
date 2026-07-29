@@ -73,15 +73,26 @@ class SpendingController extends Controller
     /**
      * Mes invalido cai no mes corrente em vez de estourar: o parametro vem da
      * barra de endereco e nao vale derrubar a tela por causa dele.
+     *
+     * A faixa e conferida junto com a forma. So o formato deixaria passar
+     * "2026-13", que o Carbon recusa lancando excecao — e "2026-00", que ele
+     * aceita em silencio como dezembro do ano anterior, o que e pior: a tela
+     * abriria mostrando outro mes sem dizer nada.
      */
     private function selectedMonth(Request $request): CarbonImmutable
     {
         $month = $request->query('mes');
 
-        if (! is_string($month) || preg_match('/^\d{4}-\d{2}$/', $month) !== 1) {
+        if (! is_string($month) || preg_match('/^(\d{4})-(\d{2})$/', $month, $matches) !== 1) {
             return CarbonImmutable::now()->startOfMonth();
         }
 
-        return CarbonImmutable::parse("{$month}-01")->startOfMonth();
+        $number = (int) $matches[2];
+
+        if ($number < 1 || $number > 12) {
+            return CarbonImmutable::now()->startOfMonth();
+        }
+
+        return CarbonImmutable::create((int) $matches[1], $number, 1);
     }
 }
