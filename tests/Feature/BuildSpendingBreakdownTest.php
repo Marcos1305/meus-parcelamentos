@@ -95,3 +95,52 @@ it('devolve a serie dos ultimos doze meses terminando no mes escolhido', functio
         ->and($breakdown['months'][0]['month'])->toBe('2025-08')
         ->and($breakdown['months'][11]['month'])->toBe('2026-07');
 });
+
+it('conta a compra a vista de dezembro no mes da fatura de janeiro', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 10_000,
+        'purchased_at' => '2025-12-28',
+        'billed_at' => '2026-01-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+
+    $janeiro = new BuildSpendingBreakdown()->handle($user, CarbonImmutable::parse('2026-01-01'));
+    $dezembro = new BuildSpendingBreakdown()->handle($user, CarbonImmutable::parse('2025-12-01'));
+
+    expect(collect($janeiro['categories'])->sum('total_cents'))->toBe(10_000)
+        ->and(collect($dezembro['categories'])->sum('total_cents'))->toBe(0);
+});
+
+it('aponta a entrada da parcela para a compra, nao para a parcela', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create(['closing_day' => 1, 'due_day' => 10]);
+
+    /**
+     * Uma compra anterior desloca os ids. Sem ela, a compra e a primeira
+     * parcela teriam ambas id 1, e a assercao passaria mesmo se o codigo
+     * devolvesse o id errado.
+     */
+    Purchase::factory()->for($card)->parcelada(3)->create(['purchased_at' => '2026-01-15']);
+
+    $purchase = Purchase::factory()->for($card)->parcelada(10)->create([
+        'total_amount_cents' => 400_000,
+        'purchased_at' => '2026-06-15',
+        'category' => ExpenseCategory::Casa,
+    ]);
+
+    $installment = $purchase->installments()->first();
+
+    expect($installment->id)->not->toBe($purchase->id);
+
+    $breakdown = new BuildSpendingBreakdown()->handle($user, $installment->due_date->startOfMonth());
+
+    $entry = collect($breakdown['entries'])->firstWhere('kind', 'purchase');
+
+    expect($entry['id'])->toBe($purchase->id)
+        ->and($entry['amount_cents'])->toBe(40_000)
+        ->and($entry['installment_label'])->toBe('1/10')
+        ->and($entry['category'])->toBe('casa')
+        ->and($entry['card_name'])->toBe($card->name);
+});
