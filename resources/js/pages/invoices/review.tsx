@@ -195,10 +195,14 @@ export default function ReviewInvoice({
 
                 <Button
                     onClick={submit}
-                    disabled={selectedCount === 0 || form.processing}
+                    disabled={
+                        (selectedCount === 0 && cash_lines_count === 0) ||
+                        form.processing
+                    }
                 >
-                    Importar {selectedCount}{' '}
-                    {selectedCount === 1 ? 'compra' : 'compras'}
+                    {selectedCount > 0
+                        ? `Importar ${selectedCount} ${selectedCount === 1 ? 'compra' : 'compras'}`
+                        : 'Salvar as compras à vista'}
                 </Button>
             </div>
         </>
