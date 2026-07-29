@@ -10,8 +10,8 @@ use App\Models\User;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Queue\Queueable;
+use Laravel\Ai\Responses\StructuredAgentResponse;
 
 /**
  * O job varre tudo que esta sem categoria em vez de receber a lista de ids da
@@ -86,17 +86,41 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
      * O identificador enviado ao modelo e a posicao no lote, nao o id do banco:
      * numero pequeno gasta menos token e nao vaza chave interna no prompt.
      *
-     * @param  Collection<int, Model>  $rows
+     * O metodo e generico porque atende as duas varreduras de handle() com o
+     * mesmo callback. `Collection<int, Model>` nao serviria: o generico do
+     * Eloquent e invariante (chunkById() de um Builder<CashPurchase> exige
+     * exatamente Collection<int, CashPurchase>, nao um supertipo como Model),
+     * e Model tambem nao garante `description` nem `category_is_manual`, as
+     * duas propriedades que o metodo le. O @template amarra TModel ao tipo
+     * concreto de cada ponto de chamada, que e sempre um dos dois.
+     *
+     * @template TModel of CashPurchase|Purchase
+     *
+     * @param  Collection<int, TModel>  $rows
      */
     private function categorize(Collection $rows): void
     {
         $indexed = $rows->values();
 
         $list = $indexed
-            ->map(fn (Model $row, int $index): string => ($index + 1).'. '.$row->description)
+            ->map(fn (CashPurchase|Purchase $row, int $index): string => ($index + 1).'. '.$row->description)
             ->implode("\n");
 
         $response = new CategorizeExpenses()->prompt($list);
+
+        /**
+         * `prompt()` declara devolver AgentResponse, que nao e acessivel como
+         * array. Na pratica, um agente com HasStructuredOutput sempre volta
+         * StructuredAgentResponse (ver GeneratesText::prompt() no pacote),
+         * que estende AgentResponse e implementa ArrayAccess — mas isso nao
+         * esta no tipo declarado. A checagem aqui e o que torna o acesso por
+         * indice seguro de verdade, nao um jeito de calar o phpstan: se um
+         * dia o agente parar de ser estruturado, o lote e pulado em vez de
+         * estourar em um offset que nao existe.
+         */
+        if (! $response instanceof StructuredAgentResponse) {
+            return;
+        }
 
         foreach ($response['items'] ?? [] as $item) {
             $row = $indexed->get(((int) ($item['id'] ?? 0)) - 1);
