@@ -7,7 +7,7 @@ use App\Enums\ExpenseCategory;
 use App\Models\CashPurchase;
 use App\Models\Purchase;
 use App\Models\User;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +19,7 @@ use Illuminate\Foundation\Queue\Queueable;
  * job, e uma classificacao que falhou numa fatura e retomada na proxima em vez
  * de ficar orfa.
  */
-class CategorizeExpensesJob implements ShouldBeUnique, ShouldQueue
+class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
@@ -46,6 +46,21 @@ class CategorizeExpensesJob implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return (string) $this->userId;
+    }
+
+    /**
+     * O prazo existe para o bloqueio se curar sozinho se o worker morrer
+     * (OOM, deploy, etc.) antes de liberar o lock: sem prazo, o cache trata
+     * zero como "nunca expira", e a categorizacao daquele usuario ficaria
+     * travada para sempre, sem erro nem log. 600 do timeout mais folga.
+     *
+     * Precisa ser metodo, nao propriedade: o framework le o bloqueio via
+     * `method_exists($job, 'uniqueFor')`, e uma propriedade publica do mesmo
+     * nome e ignorada em silencio, mantendo o prazo em zero.
+     */
+    public function uniqueFor(): int
+    {
+        return 660;
     }
 
     public function handle(): void

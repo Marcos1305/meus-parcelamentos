@@ -7,6 +7,7 @@ use App\Models\Card;
 use App\Models\CashPurchase;
 use App\Models\Purchase;
 use App\Models\User;
+use Illuminate\Support\Facades\Queue;
 
 it('categoriza compras a vista sem categoria', function (): void {
     $user = User::factory()->create();
@@ -114,4 +115,40 @@ it('nao toca em compras de outro usuario', function (): void {
     new CategorizeExpensesJob($user->id)->handle();
 
     expect($other->fresh()->category)->toBeNull();
+});
+
+it('categoriza os dois tipos na mesma passagem', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $cash = CashPurchase::factory()->forUser($user)->create(['description' => 'Supermercado Extra']);
+    $purchase = Purchase::factory()->for($card)->create(['description' => 'Posto Ipiranga']);
+
+    CategorizeExpenses::fake([
+        ['items' => [['id' => 1, 'category' => 'mercado']]],
+        ['items' => [['id' => 1, 'category' => 'combustivel']]],
+    ]);
+
+    new CategorizeExpensesJob($user->id)->handle();
+
+    expect($cash->fresh()->category)->toBe(ExpenseCategory::Mercado)
+        ->and($purchase->fresh()->category)->toBe(ExpenseCategory::Combustivel);
+});
+
+it('nao enfileira duas vezes para o mesmo usuario enquanto a primeira nao processa', function (): void {
+    Queue::fake();
+
+    $user = User::factory()->create();
+
+    CategorizeExpensesJob::dispatch($user->id);
+    CategorizeExpensesJob::dispatch($user->id);
+
+    Queue::assertPushed(CategorizeExpensesJob::class, 1);
+});
+
+it('define um prazo para o bloqueio de unicidade se curar sozinho', function (): void {
+    // Zero (o padrao sem uniqueFor) e "nunca expira" para o Lock: um worker
+    // morto antes de liberar o lock travaria a categorizacao do usuario para
+    // sempre. Precisa ser maior que o timeout do job (600s).
+    expect(new CategorizeExpensesJob(1)->uniqueFor())->toBeGreaterThan(600);
 });

@@ -1,7 +1,6 @@
 <?php
 
 use App\Actions\GenerateInstallments;
-use App\Ai\Agents\CategorizeExpenses;
 use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceParser;
@@ -23,17 +22,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-
-/**
- * confirm() despacha CategorizeExpensesJob, e a fila de teste roda em modo
- * sync (phpunit.xml): sem este fake, toda chamada a confirm() nos testes
- * abaixo executaria o job na hora e tentaria falar com o Ollama de verdade.
- * Resposta vazia porque nenhum teste deste arquivo verifica categoria — quem
- * verifica isso e CategorizeExpensesJobTest.
- */
-beforeEach(function (): void {
-    CategorizeExpenses::fake(fn (): array => ['items' => []]);
-});
 
 /**
  * Guarda a senha que chegou ao extrator para provar que o campo do
