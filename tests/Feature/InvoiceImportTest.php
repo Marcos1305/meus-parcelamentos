@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\GenerateInstallments;
+use App\Ai\Agents\CategorizeExpenses;
 use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceParser;
@@ -12,6 +13,7 @@ use App\Invoices\Parsers\MercadoPagoInvoiceParser;
 use App\Invoices\Parsers\NubankInvoiceParser;
 use App\Invoices\Parsers\RennerInvoiceParser;
 use App\Invoices\ResolveInvoiceParser;
+use App\Jobs\CategorizeExpensesJob;
 use App\Models\Card;
 use App\Models\CashPurchase;
 use App\Models\Installment;
@@ -19,7 +21,19 @@ use App\Models\Purchase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+
+/**
+ * confirm() despacha CategorizeExpensesJob, e a fila de teste roda em modo
+ * sync (phpunit.xml): sem este fake, toda chamada a confirm() nos testes
+ * abaixo executaria o job na hora e tentaria falar com o Ollama de verdade.
+ * Resposta vazia porque nenhum teste deste arquivo verifica categoria — quem
+ * verifica isso e CategorizeExpensesJobTest.
+ */
+beforeEach(function (): void {
+    CategorizeExpenses::fake(fn (): array => ['items' => []]);
+});
 
 /**
  * Guarda a senha que chegou ao extrator para provar que o campo do
@@ -1458,4 +1472,23 @@ it('nao duplica as compras a vista ao reimportar a mesma fatura', function (): v
         ->assertRedirect(route('history.index'));
 
     expect(CashPurchase::query()->count())->toBe(1);
+});
+
+it('enfileira a categorizacao ao confirmar a importacao', function (): void {
+    Queue::fake();
+
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->withSession(['invoice_import' => [
+        'card_id' => $card->id,
+        'issuer' => 'Nubank',
+        'due_date' => '2026-07-10',
+        'candidates' => [],
+        'cash_lines' => [
+            ['description' => 'Padaria do Bairro', 'day' => 5, 'month' => 6, 'amount_cents' => 1_990],
+        ],
+    ]])->post(route('invoice-imports.confirm'), ['lines' => []]);
+
+    Queue::assertPushed(CategorizeExpensesJob::class);
 });

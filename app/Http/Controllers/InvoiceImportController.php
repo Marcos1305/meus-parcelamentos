@@ -17,6 +17,7 @@ use App\Invoices\PurchaseAlreadyExists;
 use App\Invoices\ResolveInvoiceParser;
 use App\Invoices\UnreadableInvoiceException;
 use App\Invoices\UnsupportedInvoiceException;
+use App\Jobs\CategorizeExpensesJob;
 use App\Models\Card;
 use App\Models\Purchase;
 use Carbon\CarbonImmutable;
@@ -217,6 +218,8 @@ class InvoiceImportController extends Controller
         });
 
         $request->session()->forget('invoice_import');
+
+        CategorizeExpensesJob::dispatch($request->user()->id);
 
         Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported, $cashImported));
 
