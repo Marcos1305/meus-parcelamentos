@@ -3054,7 +3054,12 @@ export type SpendingBreakdown = {
 4. `<CategoryTrendChart months={breakdown.months} categories={categories} />`.
 5. Tabela das `entries` com: descrição, cartão, data, o rótulo de parcela quando houver, valor formatado por `formatBRL`, e um `<Select>` de categoria (o componente de `@/components/ui/select` já existe) que dispara `router.patch` para `spending.cash-category` ou `spending.purchase-category` conforme `entry.kind`.
 6. Quando `breakdown.uncategorized_count > 0`, um aviso com a contagem e um botão que faz `router.post` para `spending.categorize`.
-7. Estado vazio: quando `breakdown.entries` está vazio, uma mensagem dizendo que não há gastos naquele mês e que a análise começa depois da primeira importação de fatura.
+7. Estado vazio: quando `breakdown.entries` está vazio, uma mensagem dizendo que não há gastos naquele mês e que a análise começa depois da primeira importação de fatura. **O bloco dos últimos 12 meses fica fora desse ramo** — ele é justamente o contexto que continua verdadeiro quando o mês escolhido está vazio, e escondê-lo apaga a única informação útil da tela.
+
+Duas regras que valem para os dois gráficos:
+
+- **Nenhum valor pode existir só no hover.** Tooltip é complemento, não a única leitura: sem mouse não há leitura no toque, no teclado nem numa captura de tela. Se um valor não estiver rotulado direto, o eixo tem que carregá-lo.
+- **O rótulo de um mês precisa dizer de que ano ele é.** A janela tem sempre 12 meses, então o primeiro e o último têm o mesmo nome em anos diferentes.
 
 - [ ] **Step 5: Escrever os dois componentes de gráfico**
 
