@@ -1709,11 +1709,12 @@ git commit -m "feat: gravacao das compras a vista na confirmacao da importacao"
 
 ```bash
 composer require laravel/ai
-php artisan vendor:publish --provider="Laravel\Ai\AiServiceProvider" --no-interaction
-php artisan migrate --no-interaction
+php artisan vendor:publish --tag=ai-config --no-interaction
 ```
 
-> As migrações publicadas criam `agent_conversations` e `agent_conversation_messages`. Este projeto não usa conversas persistidas, mas rodá-las agora evita erro se o pacote as pressupuser em alguma rota interna.
+> **Publique só a configuração.** O `--provider=` publica tudo que o pacote expõe, incluindo os stubs dos geradores (`stubs/agent.stub` e companhia) — uma pasta base nova, que o CLAUDE.md proíbe sem aprovação, para customizar geradores que ninguém vai customizar. Confira as tags reais com `php artisan vendor:publish --provider="Laravel\Ai\AiServiceProvider"` em modo interativo se `ai-config` não existir.
+>
+> **Não publique nem rode as migrações do pacote.** Elas criam `agent_conversations` e `agent_conversation_messages`, que só servem a agentes com memória de conversa. Este agente não implementa `Conversational` nem usa `RemembersConversations`, e o `AiServiceProvider` registra o `ConversationStore` como singleton preguiçoso — nada consulta aquelas tabelas no caminho que usamos. Rodá-las deixaria duas tabelas permanentemente vazias no schema.
 
 - [ ] **Step 2: Configurar o provedor**
 
@@ -1895,7 +1896,7 @@ Expected: PASS, 3 testes.
 
 ```bash
 vendor/bin/pint --dirty --format agent
-git add composer.json composer.lock config/ai.php .env.example app/Ai tests/Feature/CategorizeExpensesAgentTest.php database/migrations
+git add composer.json composer.lock config/ai.php .env.example app/Ai tests/Feature/CategorizeExpensesAgentTest.php
 git commit -m "feat: agente de categorizacao de gastos"
 ```
 
