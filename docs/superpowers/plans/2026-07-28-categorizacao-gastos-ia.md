@@ -2687,19 +2687,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
 
-it('mostra a tela de gastos', function (): void {
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->get(route('spending.index'))
-        ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('spending/index')
-            ->has('breakdown.categories')
-            ->has('breakdown.months', 12)
-            ->has('categories', 12));
-});
-
 it('exige login', function (): void {
     $this->get(route('spending.index'))->assertRedirect(route('login'));
 });
@@ -3055,7 +3042,26 @@ Em `resources/js/components/app-sidebar.tsx`, acrescentar a `mainNavItems`, depo
 
 importando `ChartPie` de `lucide-react` e `spending` de `@/routes/spending` (confirme o caminho gerado pelo Wayfinder).
 
-- [ ] **Step 7: Verificar**
+- [ ] **Step 7: Acrescentar o teste que exercita a página**
+
+Este teste vive aqui, e não na task do controller, porque ele renderiza a página de verdade e falharia enquanto o `.tsx` não existisse. Acrescente a `tests/Feature/SpendingTest.php`:
+
+```php
+it('mostra a tela de gastos', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('spending.index'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('spending/index')
+            ->has('breakdown.categories')
+            ->has('breakdown.months', 12)
+            ->has('categories', 12));
+});
+```
+
+- [ ] **Step 8: Verificar**
 
 ```bash
 npm run types:check
@@ -3066,10 +3072,10 @@ php artisan test --compact tests/Feature/SpendingTest.php
 ```
 Expected: PASS em todos.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add resources/js
+git add resources/js tests/Feature/SpendingTest.php
 git commit -m "feat: tela de gastos por categoria"
 ```
 
