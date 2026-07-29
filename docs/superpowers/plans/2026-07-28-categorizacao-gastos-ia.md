@@ -4,7 +4,7 @@
 
 **Goal:** capturar as compras à vista da fatura, classificar todo gasto por categoria com um modelo local via Ollama, e apresentar isso em gráficos numa tela nova.
 
-**Architecture:** os parsers passam a devolver um segundo array de linhas (`cashLines`) ao lado das parceladas que já devolvem; essas linhas viram registros numa tabela própria, gravados na confirmação da importação, com índice único que impede duplicata na reimportação. Um job de fila classifica tudo que estiver sem categoria usando um agente do `laravel/ai`, cujo provedor é configuração. Uma tela nova soma por mês de cobrança e desenha rosca e barras empilhadas.
+**Architecture:** os parsers passam a devolver um segundo array de linhas (`cashLines`) ao lado das parceladas que já devolvem; essas linhas viram registros numa tabela própria, gravados na confirmação da importação, com índice único que impede duplicata na reimportação. Um job de fila classifica tudo que estiver sem categoria usando um agente do `laravel/ai`, cujo provedor é configuração. Uma tela nova soma por mês de cobrança e desenha barras horizontais ordenadas e barras empilhadas.
 
 **Tech Stack:** Laravel 13, PHP 8.4, Pest 4, Inertia v3 + React 19, recharts 3, `laravel/ai` v0.10.1, Ollama com `gemma4:e4b`.
 
@@ -2274,7 +2274,7 @@ class BuildSpendingBreakdown
     }
 
     /**
-     * A rosca traz so as categorias com gasto no mes: uma fatia de zero nao
+     * A lista traz so as categorias com gasto no mes: uma barra de zero nao
      * comunica nada e polui a legenda.
      *
      * @param  Collection<int, CashPurchase>  $cash
@@ -2749,7 +2749,7 @@ git commit -m "feat: rotas e controller da tela de gastos"
 
 **Files:**
 - Create: `resources/js/pages/spending/index.tsx`
-- Create: `resources/js/components/category-donut.tsx`
+- Create: `resources/js/components/category-breakdown-chart.tsx`
 - Create: `resources/js/components/category-trend-chart.tsx`
 - Modify: `resources/js/types/parcelamentos.ts`
 - Modify: `resources/js/components/app-sidebar.tsx`
@@ -2761,11 +2761,13 @@ git commit -m "feat: rotas e controller da tela de gastos"
 - [ ] **Step 1: Invocar as skills obrigatórias**
 
 **REQUIRED SUB-SKILLS**, nesta ordem:
-1. `dataviz` — antes de escrever qualquer linha de gráfico. Rosca com doze séries e barras empilhadas de doze meses são exatamente os casos que ela cobre.
+1. `dataviz` — antes de escrever qualquer linha de gráfico. Doze séries categóricas e barras empilhadas de doze meses são exatamente os casos que ela cobre.
 2. `frontend-design` — para a tela não sair com cara de template.
 3. `inertia-react-development` e `wayfinder-development` — padrões de página, formulário e rota tipada neste projeto.
 
-Não pule nenhuma. A skill `dataviz` decide, entre outras coisas, se rosca é mesmo a forma certa para doze categorias — se ela disser que não, siga a skill e registre a divergência com o spec no commit.
+Não pule nenhuma.
+
+**A forma do gráfico de categorias já foi decidida e não está em aberto.** A Task 6 mediu a paleta: a skill `dataviz` separa com segurança cerca de oito matizes categóricos, e doze deixam pares não adjacentes fracos — o mais próximo é Mercado `#0095ea` contra Eletrônicos `#286fe3`. O usuário decidiu trocar a rosca por **barras horizontais ordenadas do maior para o menor, com o nome da categoria e o valor impressos na própria linha**. A cor vira enfeite, não identidade — o mesmo padrão que o planejamento já usa: faixa de cor ao lado do nome, nunca legenda que o olho precise cruzar. Não reintroduza a rosca.
 
 - [ ] **Step 2: Gerar as rotas tipadas**
 
@@ -2822,7 +2824,7 @@ export type SpendingBreakdown = {
 
 1. Layout da aplicação, como as demais páginas fazem (`history/index.tsx` é a referência mais próxima).
 2. Seletor de mês no topo, que navega para `spending.index` com `?mes=YYYY-MM`. Use `<Link>` do Inertia com `prefetch`, no padrão do projeto.
-3. `<CategoryDonut categories={breakdown.categories} />`.
+3. `<CategoryBreakdownChart categories={breakdown.categories} />` — barras horizontais ordenadas, nome e valor na própria linha.
 4. `<CategoryTrendChart months={breakdown.months} categories={categories} />`.
 5. Tabela das `entries` com: descrição, cartão, data, o rótulo de parcela quando houver, valor formatado por `formatBRL`, e um `<Select>` de categoria (o componente de `@/components/ui/select` já existe) que dispara `router.patch` para `spending.cash-category` ou `spending.purchase-category` conforme `entry.kind`.
 6. Quando `breakdown.uncategorized_count > 0`, um aviso com a contagem e um botão que faz `router.post` para `spending.categorize`.
@@ -2830,7 +2832,7 @@ export type SpendingBreakdown = {
 
 - [ ] **Step 5: Escrever os dois componentes de gráfico**
 
-`category-donut.tsx` e `category-trend-chart.tsx`, com `recharts`, seguindo `projection-chart.tsx`: `ResponsiveContainer`, tooltip própria formatando com `formatBRL`, cores vindas da prop (nunca hardcoded no componente — a fonte é o enum no servidor).
+`category-breakdown-chart.tsx` e `category-trend-chart.tsx`, com `recharts`, seguindo `projection-chart.tsx`: `ResponsiveContainer`, tooltip própria formatando com `formatBRL`, cores vindas da prop (nunca hardcoded no componente — a fonte é o enum no servidor).
 
 - [ ] **Step 6: Adicionar ao menu**
 
@@ -2902,7 +2904,7 @@ Leia as quarenta linhas com o usuário. O que procurar:
 
 - [ ] **Step 5: Conferir a tela**
 
-Abra `/gastos` no navegador. Confirme que a rosca soma o mesmo total que a lista, que o seletor de mês muda os três blocos, e que editar uma categoria persiste e marca como manual (reprocessar não deve desfazer a edição).
+Abra `/gastos` no navegador. Confirme que as barras somam o mesmo total que a lista, que o seletor de mês muda os três blocos, e que editar uma categoria persiste e marca como manual (reprocessar não deve desfazer a edição).
 
 - [ ] **Step 6: Rodar a suíte inteira e o phpstan**
 
@@ -2943,7 +2945,7 @@ git commit -m "fix: ajustes das instrucoes do agente apos verificacao com fatura
 | Provedor é configuração | 9 |
 | Extração nos quatro emissores | 2, 3, 4, 5 |
 | Índice único contra reimportação | 7, 8 |
-| Rosca, barras de 12 meses, lista do mês | 11, 13 |
+| Barras horizontais por categoria, barras de 12 meses, lista do mês | 11, 13 |
 | Balde "Sem categoria" com reprocessar | 11, 12, 13 |
 | Nenhum teste depende de Ollama | 9, 10 (`fake()`) |
 | Verificação manual com fatura real | 14 |
@@ -2956,4 +2958,4 @@ git commit -m "fix: ajustes das instrucoes do agente apos verificacao com fatura
 
 1. **`laravel/ai` é v0.10.1 e este plano foi escrito lendo seu fonte, não usando-o.** As assinaturas de `fake()`, `instructions()` e `providerOptions()` foram conferidas no repositório, mas se o pacote divergir, **o pacote vence** — ajuste o código e siga.
 2. **A Task 8 relaxa uma invariante existente** (`candidates` não-vazio). Testes atuais de `InvoiceImportTest` podem depender dela. Isso é esperado e está sinalizado no Step 11 daquela task.
-3. **A Task 13 pode divergir do spec** se a skill `dataviz` desaconselhar rosca para doze séries. Siga a skill e registre a divergência.
+3. **A Task 13 diverge do spec original por decisão do usuário:** barras horizontais ordenadas no lugar da rosca, porque doze matizes categóricos não se separam com segurança. O spec foi atualizado.

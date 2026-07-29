@@ -119,11 +119,11 @@ Rota `/gastos`, `SpendingController@index`, página `spending/index.tsx`, item n
 
 Uma action `BuildSpendingBreakdown`, no formato das actions existentes, entrega:
 
-1. **Rosca do mês selecionado** — valor e percentual por categoria.
+1. **Barras horizontais do mês selecionado** — uma por categoria, ordenadas do maior para o menor, com nome e valor impressos na própria linha.
 2. **Barras empilhadas dos últimos 12 meses** — uma barra por mês, segmentada por categoria.
 3. **Lista do mês** — à vista e parcelas juntas, com a categoria editável em linha.
 
-Seletor de mês no topo, valendo para a rosca e a lista. Gráficos em `recharts`, seguindo `projection-chart.tsx`.
+Seletor de mês no topo, valendo para as barras por categoria e a lista. Gráficos em `recharts`, seguindo `projection-chart.tsx`.
 
 O balde "Sem categoria" é visível e traz botão que enfileira o job para o que ainda não foi classificado.
 
