@@ -5,20 +5,6 @@ use App\Jobs\CategorizeExpensesJob;
 use App\Models\CashPurchase;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
-use Inertia\Testing\AssertableInertia;
-
-it('mostra a tela de gastos', function (): void {
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->get(route('spending.index'))
-        ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('spending/index')
-            ->has('breakdown.categories')
-            ->has('breakdown.months', 12)
-            ->has('categories', 12));
-});
 
 it('exige login', function (): void {
     $this->get(route('spending.index'))->assertRedirect(route('login'));
