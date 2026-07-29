@@ -17,6 +17,7 @@ type ReviewProps = {
     due_date: string;
     card: { id: number; name: string; last_four_digits: string };
     candidates: InvoiceCandidate[];
+    cash_lines_count: number;
 };
 
 export default function ReviewInvoice({
@@ -24,6 +25,7 @@ export default function ReviewInvoice({
     due_date,
     card,
     candidates,
+    cash_lines_count,
 }: ReviewProps) {
     const [selected, setSelected] = useState<boolean[]>(() =>
         candidates.map((candidate) => candidate.status === 'matched'),
@@ -89,6 +91,14 @@ export default function ReviewInvoice({
                         errors={errorMessages}
                         title="Não foi possível concluir a importação."
                     />
+                )}
+
+                {cash_lines_count > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                        {cash_lines_count === 1
+                            ? '1 compra à vista desta fatura também será salva para análise de gastos.'
+                            : `${cash_lines_count} compras à vista desta fatura também serão salvas para análise de gastos.`}
+                    </p>
                 )}
 
                 <Card>

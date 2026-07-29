@@ -12,6 +12,7 @@ use App\Invoices\Parsers\NubankInvoiceParser;
 use App\Invoices\Parsers\RennerInvoiceParser;
 use App\Invoices\ResolveInvoiceParser;
 use App\Models\Card;
+use App\Models\CashPurchase;
 use App\Models\Installment;
 use App\Models\Purchase;
 use App\Models\User;
@@ -1171,7 +1172,14 @@ it('manda enviar o pdf de novo quando a sessao nao traz o vencimento da primeira
     expect(Purchase::count())->toBe(0);
 });
 
-it('nao quebra quando a sessao de importacao nao tem candidato nenhum', function (): void {
+/**
+ * Uma sessao com candidates vazio deixou de ser sinal de sessao imprestavel:
+ * pode ser uma fatura so de compras a vista (ver testes de WriteCashPurchases
+ * acima). O que este teste cobre agora e outra coisa: o indice 0, permitido
+ * pela validacao do formulario mesmo sem nenhum candidato na sessao, nao
+ * pode virar erro fatal ao tentar ler um candidato que nao existe.
+ */
+it('nao quebra quando o indice submetido nao existe numa sessao sem candidato nenhum', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create([
         'closing_day' => 3,
@@ -1189,10 +1197,10 @@ it('nao quebra quando a sessao de importacao nao tem candidato nenhum', function
         ->post(route('invoice-imports.confirm'), [
             'lines' => [['index' => 0, 'purchased_at' => '2026-03-02']],
         ])
-        ->assertRedirect(route('invoice-imports.create'))
+        ->assertRedirect(route('history.index'))
         ->assertSessionHas(
             'inertia.flash_data.toast.message',
-            'A revisão da fatura expirou. Envie o PDF novamente.',
+            'Nenhuma compra foi importada: ela já constava no histórico ou não pôde ser lida.',
         );
 
     expect(Purchase::count())->toBe(0);
@@ -1253,4 +1261,46 @@ it('avisa que o leitor de pdf nao esta acessivel em vez de culpar a senha', func
             'password' => '16324',
         ])
         ->assertSessionHasErrors(['invoice' => 'O leitor de PDF não está instalado ou não está acessível no servidor. Não é problema do seu arquivo nem da senha.']);
+});
+
+it('grava as compras a vista ao confirmar a importacao', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)->withSession(['invoice_import' => [
+        'card_id' => $card->id,
+        'issuer' => 'Nubank',
+        'due_date' => '2026-07-10',
+        'candidates' => [],
+        'cash_lines' => [
+            ['description' => 'Padaria do Bairro', 'day' => 5, 'month' => 6, 'amount_cents' => 1_990],
+            ['description' => 'Posto Ipiranga', 'day' => 6, 'month' => 6, 'amount_cents' => 31_849],
+        ],
+    ]]);
+
+    $this->post(route('invoice-imports.confirm'), ['lines' => []]);
+
+    expect(CashPurchase::query()->count())->toBe(2)
+        ->and(CashPurchase::query()->first()->billed_at->toDateString())->toBe('2026-07-10')
+        ->and(CashPurchase::query()->first()->purchased_at->toDateString())->toBe('2026-06-05');
+});
+
+it('nao duplica as compras a vista ao reimportar a mesma fatura', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $session = ['invoice_import' => [
+        'card_id' => $card->id,
+        'issuer' => 'Nubank',
+        'due_date' => '2026-07-10',
+        'candidates' => [],
+        'cash_lines' => [
+            ['description' => 'Padaria do Bairro', 'day' => 5, 'month' => 6, 'amount_cents' => 1_990],
+        ],
+    ]];
+
+    $this->actingAs($user)->withSession($session)->post(route('invoice-imports.confirm'), ['lines' => []]);
+    $this->actingAs($user)->withSession($session)->post(route('invoice-imports.confirm'), ['lines' => []]);
+
+    expect(CashPurchase::query()->count())->toBe(1);
 });
