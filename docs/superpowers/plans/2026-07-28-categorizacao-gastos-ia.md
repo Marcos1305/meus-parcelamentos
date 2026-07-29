@@ -2002,6 +2002,29 @@ it('nao toca em compras de outro usuario', function (): void {
 
 > Se `CategorizeExpenses::fake()` esgotar as respostas quando o job faz duas chamadas (uma para à vista, outra para parceladas), passe a mesma resposta duas vezes no array ou use a forma de closure. Ajuste ao contrato real do pacote.
 
+**O teste acima é fraco de propósito e precisa de um par.** Ele prova o resultado — a linha do usuário não é sobrescrita — mas não exercita a guarda dentro do laço: `whereNull('category')` já exclui a linha da consulta antes de a guarda existir. Acrescente o par que testa a guarda de verdade, com categoria nula e marca manual verdadeira:
+
+```php
+it('nao sobrescreve linha marcada como manual mesmo sem categoria', function (): void {
+    $user = User::factory()->create();
+    $cash = CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Supermercado Extra',
+        'category' => null,
+        'category_is_manual' => true,
+    ]);
+
+    CategorizeExpenses::fake([
+        ['items' => [['id' => 1, 'category' => 'mercado']]],
+    ]);
+
+    new CategorizeExpensesJob($user->id)->handle();
+
+    expect($cash->fresh()->category)->toBeNull();
+});
+```
+
+**E cuidado com a fila nos testes.** `phpunit.xml` define `QUEUE_CONNECTION=sync`, então o `dispatch()` no `confirm()` roda **de verdade** dentro de todo teste de importação que não falseia a fila — e chamaria o Ollama. Contenha isso onde nenhum teste futuro possa esquecer.
+
 - [ ] **Step 2: Rodar e ver falhar**
 
 Run: `php artisan test --compact tests/Feature/CategorizeExpensesJobTest.php`
