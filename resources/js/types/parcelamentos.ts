@@ -58,6 +58,67 @@ export type MonthlyProjectionRow = {
     total_cents: number;
 };
 
+export type ExpenseCategoryOption = {
+    value: string;
+    label: string;
+    color: string;
+};
+
+/**
+ * Chave do balde "sem categoria" dentro de `SpendingMonthTotals.totals` e do
+ * `category` sintetico em `SpendingCategoryTotal`, e mesmo valor usado como
+ * sentinela do "sem categoria" no seletor manual de categoria. Espelha
+ * `BuildSpendingBreakdown::UNCATEGORIZED_CATEGORY` no servidor — não é um
+ * `ExpenseCategory` real.
+ */
+export const UNCATEGORIZED_CATEGORY_KEY = 'sem-categoria';
+
+export type SpendingCategoryTotal = {
+    category: string;
+    label: string;
+    color: string;
+    total_cents: number;
+};
+
+export type SpendingMonthTotals = {
+    month: string;
+    totals: Record<string, number>;
+};
+
+export type SpendingEntry = {
+    id: number;
+    kind: 'cash' | 'purchase';
+    description: string;
+    amount_cents: number;
+    purchased_at: string;
+    installment_label: string | null;
+    category: string | null;
+    category_is_manual: boolean;
+    card_name: string;
+};
+
+export type SpendingBreakdown = {
+    month: string;
+    categories: SpendingCategoryTotal[];
+    months: SpendingMonthTotals[];
+    entries: SpendingEntry[];
+    uncategorized_count: number;
+    uncategorized_total_cents: number;
+    uncategorized_color: string;
+    /**
+     * Filtro de categoria ja validado pelo servidor (subconjunto de
+     * ExpenseCategory::values() mais, possivelmente, UNCATEGORIZED_CATEGORY_KEY).
+     * Vazio significa "todas as categorias" — nao ha filtro ativo.
+     */
+    active_categories: string[];
+    /**
+     * Opcoes para os chips de filtro: categorias com gasto no mes (sem o
+     * filtro aplicado), mais qualquer categoria hoje filtrada que tenha
+     * zerado no mes, para o usuario conseguir desmarca-la.
+     */
+    available_categories: SpendingCategoryTotal[];
+};
+
 export type DashboardSummary = {
     cards_count: number;
     open_installments_count: number;

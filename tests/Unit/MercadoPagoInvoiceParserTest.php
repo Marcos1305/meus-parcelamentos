@@ -87,3 +87,31 @@ it('nao extrai linha da prosa explicativa sobre parcelamento', function (): void
 
     expect($lines)->toHaveCount(0);
 });
+
+it('extrai as compras a vista', function (): void {
+    $cashLines = (new MercadoPagoInvoiceParser)->parse(mercadoPagoFixture())->cashLines;
+
+    expect($cashLines)->toHaveCount(54);
+
+    foreach ($cashLines as $line) {
+        expect($line->amountCents)->toBeGreaterThan(0)
+            ->and($line->description)->not->toContain('Parcela');
+    }
+});
+
+it('ignora o pagamento da fatura anterior', function (): void {
+    $descriptions = array_map(
+        fn ($line): string => mb_strtolower($line->description),
+        (new MercadoPagoInvoiceParser)->parse(mercadoPagoFixture())->cashLines,
+    );
+
+    foreach ($descriptions as $description) {
+        expect($description)->not->toStartWith('pagamento');
+    }
+});
+
+it('descarta uma compra a vista com valor negativo', function (): void {
+    $text = mercadoPagoFixture()."\n15/06      ESTORNO DE COMPRA                                        -R\$ 50,00\n";
+
+    expect((new MercadoPagoInvoiceParser)->parse($text)->cashLines)->toHaveCount(54);
+});

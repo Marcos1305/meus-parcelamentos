@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\ExpenseCategory;
 use Carbon\CarbonImmutable;
 use Database\Factories\PurchaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -20,12 +22,14 @@ use Illuminate\Support\Carbon;
  * @property int $total_amount_cents
  * @property int $installments_count
  * @property CarbonImmutable $purchased_at
+ * @property ExpenseCategory|null $category
+ * @property bool $category_is_manual
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Card $card
  * @property-read Collection<int, Installment> $installments
  */
-#[Fillable(['card_id', 'description', 'merchant', 'total_amount_cents', 'installments_count', 'purchased_at'])]
+#[Fillable(['card_id', 'description', 'merchant', 'total_amount_cents', 'installments_count', 'purchased_at', 'category', 'category_is_manual'])]
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */
@@ -52,6 +56,15 @@ class Purchase extends Model
         return $this->hasMany(Installment::class)->orderBy('number');
     }
 
+    /** @param Builder<Purchase> $query */
+    public function scopeForUser(Builder $query, User $user): void
+    {
+        $query->whereHas(
+            'card',
+            fn (Builder $cards) => $cards->where('user_id', $user->id),
+        );
+    }
+
     /**
      * @return array<string, string>
      */
@@ -61,6 +74,8 @@ class Purchase extends Model
             'purchased_at' => 'immutable_date',
             'total_amount_cents' => 'integer',
             'installments_count' => 'integer',
+            'category' => ExpenseCategory::class,
+            'category_is_manual' => 'boolean',
         ];
     }
 }
