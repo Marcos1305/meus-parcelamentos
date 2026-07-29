@@ -1657,6 +1657,18 @@ E o rótulo precisa dizer a verdade sobre o que vai acontecer:
     : 'Salvar as compras à vista'}
 ```
 
+- [ ] **Step 9b: A mensagem final precisa contar as compras à vista**
+
+`importToast()` hoje só conhece parceladas. Numa fatura só com compras à vista ele recebe `(0, 0)` e diz *"Nenhuma compra foi importada"* — depois de gravar dezenas de registros. Isso era inalcançável antes desta task, e passa a ser o caminho feliz novo.
+
+`WriteCashPurchases::handle()` já devolve quantas gravou, e o retorno está sendo descartado. Aproveite-o e passe a contagem para `importToast()`. As regras que a mensagem tem que respeitar:
+
+- **Nunca** dizer que nada foi importado quando compras à vista foram gravadas.
+- Mencionar a contagem de à vista sempre que ela for maior que zero, inclusive numa fatura mista.
+- Continuar dizendo a verdade sobre as parceladas puladas, como já faz.
+
+A redação é sua; as três regras não são. Escreva um teste por regra.
+
 - [ ] **Step 10: Rodar os testes**
 
 ```bash
