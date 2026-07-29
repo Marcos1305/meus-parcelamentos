@@ -1986,6 +1986,24 @@ it('ignora categoria que nao existe no enum', function (): void {
     expect($cash->fresh()->category)->toBeNull();
 });
 
+it('categoriza os dois tipos na mesma passagem', function (): void {
+    $user = User::factory()->create();
+    $card = App\Models\Card::factory()->for($user)->create();
+
+    $cash = CashPurchase::factory()->forUser($user)->create(['description' => 'Supermercado Extra']);
+    $purchase = Purchase::factory()->for($card)->create(['description' => 'Posto Ipiranga']);
+
+    CategorizeExpenses::fake([
+        ['items' => [['id' => 1, 'category' => 'mercado']]],
+        ['items' => [['id' => 1, 'category' => 'combustivel']]],
+    ]);
+
+    new CategorizeExpensesJob($user->id)->handle();
+
+    expect($cash->fresh()->category)->toBe(ExpenseCategory::Mercado)
+        ->and($purchase->fresh()->category)->toBe(ExpenseCategory::Combustivel);
+});
+
 it('nao toca em compras de outro usuario', function (): void {
     $user = User::factory()->create();
     $other = CashPurchase::factory()->create(['description' => 'Supermercado Extra']);
@@ -2059,8 +2077,13 @@ use Illuminate\Foundation\Queue\Queueable;
  * importacao. Assim a importacao e o botao de reprocessar despacham o mesmo
  * job, e uma classificacao que falhou numa fatura e retomada na proxima em vez
  * de ficar orfa.
+ *
+ * A unicidade termina quando o job comeca a processar, nao quando termina:
+ * uma importacao que chegue durante a varredura precisa conseguir enfileirar
+ * a propria, senao as linhas que ela gravou depois da consulta ficariam sem
+ * categoria ate alguem apertar o botao de reprocessar.
  */
-class CategorizeExpensesJob implements ShouldBeUnique, ShouldQueue
+class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
@@ -2083,6 +2106,14 @@ class CategorizeExpensesJob implements ShouldBeUnique, ShouldQueue
     public int $timeout = 600;
 
     public function __construct(public int $userId) {}
+
+    /**
+     * O bloqueio precisa de prazo. Sem `uniqueFor` ele nunca expira, e um
+     * worker morto antes de liberar deixaria a categorizacao deste usuario
+     * bloqueada para sempre — sem erro, sem log, sem sintoma alem de nada
+     * ganhar categoria nunca mais.
+     */
+    public int $uniqueFor = 660;
 
     public function uniqueId(): string
     {
