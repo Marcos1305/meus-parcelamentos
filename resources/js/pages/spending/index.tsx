@@ -1,10 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { CategoryBreakdownChart } from '@/components/category-breakdown-chart';
+import { CategoryFilterChips } from '@/components/category-filter-chips';
 import { CategoryTrendChart } from '@/components/category-trend-chart';
 import { EmptyState } from '@/components/empty-state';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import {
     Select,
     SelectContent,
@@ -41,6 +48,21 @@ function categoryRoute(entry: SpendingEntry): string {
         : spending.purchaseCategory(entry.id).url;
 }
 
+/**
+ * Mes e filtro de categoria vivem juntos na url e cada um sobrevive a troca
+ * do outro: navegar de mes preserva `categorias`, e marcar/desmarcar um chip
+ * preserva `mes`. Omitir `categorias` quando a lista fica vazia (em vez de
+ * mandar uma string vazia) mantem a url limpa no caso comum de "sem filtro".
+ */
+function spendingQuery(
+    targetMonth: string,
+    activeCategories: string[],
+): Record<string, string> {
+    return activeCategories.length > 0
+        ? { mes: targetMonth, categorias: activeCategories.join(',') }
+        : { mes: targetMonth };
+}
+
 export default function Spending({ breakdown, categories }: SpendingProps) {
     const {
         month,
@@ -48,10 +70,38 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         uncategorized_count: uncategorizedCount,
         uncategorized_total_cents: uncategorizedTotalCents,
         uncategorized_color: uncategorizedColor,
+        active_categories: activeCategories,
+        available_categories: availableCategories,
     } = breakdown;
 
+    const isFiltered = activeCategories.length > 0;
+    const filteredTotalCents = breakdown.categories.reduce(
+        (sum, category) => sum + category.total_cents,
+        0,
+    );
+    // A trilha do grafico de 12 meses so mostra o balde "sem categoria"
+    // quando ele nao foi excluido por um filtro ativo: caso contrario a serie
+    // ficaria sempre zerada e so poluiria a legenda.
+    const trendCategories = isFiltered
+        ? categories.filter((category) =>
+              activeCategories.includes(category.value),
+          )
+        : categories;
+    const includeUncategorizedInTrend =
+        !isFiltered || activeCategories.includes(NO_CATEGORY);
+
     function goToMonth(target: string) {
-        return spending.index({ query: { mes: target } });
+        return spending.index({
+            query: spendingQuery(target, activeCategories),
+        });
+    }
+
+    function toggleCategoryFilter(category: string): string {
+        const next = activeCategories.includes(category)
+            ? activeCategories.filter((value) => value !== category)
+            : [...activeCategories, category];
+
+        return spending.index({ query: spendingQuery(month, next) }).url;
     }
 
     function changeCategory(entry: SpendingEntry, value: string) {
@@ -101,10 +151,24 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     </div>
                 </div>
 
+                <CategoryFilterChips
+                    options={availableCategories}
+                    active={activeCategories}
+                    hrefFor={toggleCategoryFilter}
+                />
+
                 {entries.length === 0 && (
                     <EmptyState
-                        title="Nenhum gasto neste mês"
-                        description="A análise por categoria começa depois da primeira importação de fatura."
+                        title={
+                            isFiltered
+                                ? 'Nenhum gasto nas categorias selecionadas'
+                                : 'Nenhum gasto neste mês'
+                        }
+                        description={
+                            isFiltered
+                                ? 'Ajuste os filtros acima ou troque de mês para ver outros gastos.'
+                                : 'A análise por categoria começa depois da primeira importação de fatura.'
+                        }
                     />
                 )}
 
@@ -148,6 +212,13 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Gastos por categoria</CardTitle>
+                                {isFiltered && (
+                                    <CardDescription>
+                                        Subtotal das categorias selecionadas:{' '}
+                                        {formatBRL(filteredTotalCents)}. Não é
+                                        o total do mês.
+                                    </CardDescription>
+                                )}
                             </CardHeader>
                             <CardContent>
                                 {breakdown.categories.length === 0 ? (
@@ -167,12 +238,21 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     <Card>
                         <CardHeader>
                             <CardTitle>Últimos 12 meses</CardTitle>
+                            {isFiltered && (
+                                <CardDescription>
+                                    Evolução apenas das categorias
+                                    selecionadas — não é o total do mês.
+                                </CardDescription>
+                            )}
                         </CardHeader>
                         <CardContent>
                             <CategoryTrendChart
                                 months={breakdown.months}
-                                categories={categories}
+                                categories={trendCategories}
                                 uncategorizedColor={uncategorizedColor}
+                                includeUncategorized={
+                                    includeUncategorizedInTrend
+                                }
                             />
                         </CardContent>
                     </Card>

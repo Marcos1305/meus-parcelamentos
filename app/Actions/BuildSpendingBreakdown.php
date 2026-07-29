@@ -18,8 +18,13 @@ class BuildSpendingBreakdown
      * enum para nao colidir, e nunca e aceita pela validacao de PATCH de
      * categoria (UpdateExpenseCategoryRequest), entao nao ha risco de o
      * usuario "escolher" este balde pelo seletor manual.
+     *
+     * Publica porque o controller precisa dela para validar o filtro de
+     * categoria vindo da URL (?categorias=) contra a mesma lista de chaves
+     * aceitas aqui, em vez de duplicar o literal 'sem-categoria' em outro
+     * arquivo.
      */
-    private const UNCATEGORIZED_CATEGORY = 'sem-categoria';
+    public const UNCATEGORIZED_CATEGORY = 'sem-categoria';
 
     private const UNCATEGORIZED_LABEL = 'Sem categoria';
 
@@ -45,6 +50,24 @@ class BuildSpendingBreakdown
      * classificado, e isso e indistinguivel de uma queda de gasto de verdade
      * no grafico dos ultimos 12 meses.
      *
+     * O filtro de categoria (categoryFilter) restringe os quatro blocos de
+     * saida (categories, months, entries e o par uncategorized_*) ao mesmo
+     * subconjunto: em vez de recalcular cada bloco com uma condicao propria,
+     * as colecoes $cash e $installments sao filtradas uma unica vez antes de
+     * alimentar os mesmos metodos usados no caminho sem filtro. E assim que a
+     * garantia de reconciliacao (barras + balde fecham o total exibido) se
+     * mantem verdadeira tambem sob filtro — o "total exibido" passa a ser o
+     * total do subconjunto filtrado, nao o total do mes.
+     *
+     * available_categories nao usa as colecoes filtradas: ele lista as
+     * categorias com gasto no mes a partir das colecoes originais, para que os
+     * chips de filtro da tela ofereçam todas as opcoes com gasto no mes, nao
+     * so as que sobrevivem ao filtro atual (senao o usuario nunca conseguiria
+     * ampliar a selecao). A excecao e a categoria hoje filtrada que zerou no
+     * mes: ela e adicionada de volta com total zero para o usuario conseguir
+     * desmarca-la.
+     *
+     * @param  array<int, string>  $categoryFilter  chaves ja validadas pelo controller (ExpenseCategory::values() + self::UNCATEGORIZED_CATEGORY); vazio significa "todas"
      * @return array{
      *   month: string,
      *   categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
@@ -53,26 +76,32 @@ class BuildSpendingBreakdown
      *   uncategorized_count: int,
      *   uncategorized_total_cents: int,
      *   uncategorized_color: string,
+     *   active_categories: array<int, string>,
+     *   available_categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
      * }
      */
-    public function handle(User $user, CarbonImmutable $month, int $months = 12): array
+    public function handle(User $user, CarbonImmutable $month, int $months = 12, array $categoryFilter = []): array
     {
         $start = $month->startOfMonth();
         $seriesStart = $start->subMonths($months - 1);
 
-        $cash = CashPurchase::query()
+        $cashAll = CashPurchase::query()
             ->forUser($user)
             ->with('card:id,name')
             ->whereDate('billed_at', '>=', $seriesStart->toDateString())
             ->whereDate('billed_at', '<=', $start->endOfMonth()->toDateString())
             ->get();
 
-        $installments = Installment::query()
+        $installmentsAll = Installment::query()
             ->forUser($user)
             ->with('purchase:id,card_id,description,installments_count,category,category_is_manual', 'purchase.card:id,name')
             ->whereDate('due_date', '>=', $seriesStart->toDateString())
             ->whereDate('due_date', '<=', $start->endOfMonth()->toDateString())
             ->get();
+
+        [$cash, $installments] = $categoryFilter === []
+            ? [$cashAll, $installmentsAll]
+            : $this->applyCategoryFilter($cashAll, $installmentsAll, $categoryFilter);
 
         return [
             'month' => $start->format('Y-m'),
@@ -82,7 +111,62 @@ class BuildSpendingBreakdown
             'uncategorized_count' => $this->uncategorizedCount($cash, $installments, $start),
             'uncategorized_total_cents' => $this->uncategorizedTotalCents($cash, $installments, $start),
             'uncategorized_color' => self::UNCATEGORIZED_COLOR,
+            'active_categories' => $categoryFilter,
+            'available_categories' => $this->availableCategories($cashAll, $installmentsAll, $start, $categoryFilter),
         ];
+    }
+
+    /**
+     * @param  Collection<int, CashPurchase>  $cash
+     * @param  Collection<int, Installment>  $installments
+     * @param  array<int, string>  $categoryFilter
+     * @return array{0: Collection<int, CashPurchase>, 1: Collection<int, Installment>}
+     */
+    private function applyCategoryFilter(Collection $cash, Collection $installments, array $categoryFilter): array
+    {
+        $filteredCash = $cash
+            ->filter(fn (CashPurchase $purchase): bool => in_array($purchase->category->value ?? self::UNCATEGORIZED_CATEGORY, $categoryFilter, true))
+            ->values();
+
+        $filteredInstallments = $installments
+            ->filter(fn (Installment $installment): bool => in_array($installment->purchase->category->value ?? self::UNCATEGORIZED_CATEGORY, $categoryFilter, true))
+            ->values();
+
+        return [$filteredCash, $filteredInstallments];
+    }
+
+    /**
+     * Opcoes dos chips de filtro: as categorias com gasto no mes (calculadas
+     * sem filtro), acrescidas de qualquer categoria do filtro atual que nao
+     * tenha sobrado nessa lista porque zerou no mes. Sem essa excecao, trocar
+     * de mes com um filtro ativo poderia fazer o chip selecionado sumir da
+     * tela e o usuario ficaria sem forma de desmarca-lo.
+     *
+     * @param  Collection<int, CashPurchase>  $cashAll
+     * @param  Collection<int, Installment>  $installmentsAll
+     * @param  array<int, string>  $categoryFilter
+     * @return array<int, array{category: string, label: string, color: string, total_cents: int}>
+     */
+    private function availableCategories(Collection $cashAll, Collection $installmentsAll, CarbonImmutable $month, array $categoryFilter): array
+    {
+        $options = $this->categories($cashAll, $installmentsAll, $month);
+
+        $present = array_column($options, 'category');
+
+        foreach ($categoryFilter as $value) {
+            if (in_array($value, $present, true)) {
+                continue;
+            }
+
+            $options[] = [
+                'category' => $value,
+                'label' => $value === self::UNCATEGORIZED_CATEGORY ? self::UNCATEGORIZED_LABEL : ExpenseCategory::from($value)->label(),
+                'color' => $value === self::UNCATEGORIZED_CATEGORY ? self::UNCATEGORIZED_COLOR : ExpenseCategory::from($value)->color(),
+                'total_cents' => 0,
+            ];
+        }
+
+        return $options;
     }
 
     /**

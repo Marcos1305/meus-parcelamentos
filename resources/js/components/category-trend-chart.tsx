@@ -97,29 +97,42 @@ function TrendLegend({ categories }: { categories: ExpenseCategoryOption[] }) {
  * perceptual entre vizinhos. Reordenar por valor quebraria essa garantia e
  * "repintaria" categorias entre um mês e outro.
  *
- * O balde "sem categoria" é acrescentado depois dessas treze, sempre por
- * último: ele não faz parte da paleta categórica (é cinza neutro, vindo do
- * servidor) e não deve competir por posição no empilhado como se fosse mais
- * uma categoria — só entra para que a altura da barra do mês não fique menor
- * que o gasto real quando parte dele ainda não foi classificada.
+ * O balde "sem categoria" é acrescentado depois das categorias recebidas,
+ * sempre por último quando presente (includeUncategorized): ele não faz parte
+ * da paleta categórica (é cinza neutro, vindo do servidor) e não deve competir
+ * por posição no empilhado como se fosse mais uma categoria — só entra para
+ * que a altura da barra do mês não fique menor que o gasto real quando parte
+ * dele ainda não foi classificada. Sob filtro de categoria que exclui
+ * "sem categoria", includeUncategorized vem false e o balde nem aparece na
+ * legenda, já que ficaria sempre zerado.
  */
 export function CategoryTrendChart({
     months,
     categories,
     uncategorizedColor,
+    includeUncategorized = true,
 }: {
     months: SpendingMonthTotals[];
     categories: ExpenseCategoryOption[];
     uncategorizedColor: string;
+    /**
+     * Quando o filtro de categoria da tela esta ativo e nao inclui "sem
+     * categoria", o balde nao entra na pilha: ele so apareceria com altura
+     * zero em todo mes, poluindo a legenda com uma serie que nunca soma nada
+     * no recorte atual.
+     */
+    includeUncategorized?: boolean;
 }) {
-    const allSeries: ExpenseCategoryOption[] = [
-        ...categories,
-        {
-            value: UNCATEGORIZED_CATEGORY_KEY,
-            label: 'Sem categoria',
-            color: uncategorizedColor,
-        },
-    ];
+    const allSeries: ExpenseCategoryOption[] = includeUncategorized
+        ? [
+              ...categories,
+              {
+                  value: UNCATEGORIZED_CATEGORY_KEY,
+                  label: 'Sem categoria',
+                  color: uncategorizedColor,
+              },
+          ]
+        : categories;
 
     const data: TrendPoint[] = months.map((row) => {
         const [year, monthNumber] = row.month.split('-');

@@ -105,6 +105,18 @@ export type SpendingBreakdown = {
     uncategorized_count: number;
     uncategorized_total_cents: number;
     uncategorized_color: string;
+    /**
+     * Filtro de categoria ja validado pelo servidor (subconjunto de
+     * ExpenseCategory::values() mais, possivelmente, UNCATEGORIZED_CATEGORY_KEY).
+     * Vazio significa "todas as categorias" — nao ha filtro ativo.
+     */
+    active_categories: string[];
+    /**
+     * Opcoes para os chips de filtro: categorias com gasto no mes (sem o
+     * filtro aplicado), mais qualquer categoria hoje filtrada que tenha
+     * zerado no mes, para o usuario conseguir desmarca-la.
+     */
+    available_categories: SpendingCategoryTotal[];
 };
 
 export type DashboardSummary = {

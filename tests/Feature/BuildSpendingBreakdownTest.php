@@ -168,6 +168,135 @@ it('conta a compra a vista de dezembro no mes da fatura de janeiro', function ()
         ->and(collect($dezembro['categories'])->sum('total_cents'))->toBe(0);
 });
 
+it('filtra os quatro blocos por uma categoria', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 10_000,
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 5_000,
+        'billed_at' => '2026-07-15',
+        'category' => ExpenseCategory::Casa,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: ['mercado'],
+    );
+
+    // Sem o filtro, o total do mes seria 15_000 (mercado + casa) e a lista
+    // teria duas entradas: se qualquer um desses numeros aparecer, o filtro
+    // nao foi aplicado.
+    $julho = collect($breakdown['months'])->firstWhere('month', '2026-07');
+
+    expect(collect($breakdown['categories'])->pluck('category')->all())->toBe(['mercado'])
+        ->and(collect($breakdown['categories'])->sum('total_cents'))->toBe(10_000)
+        ->and($julho['totals'])->toBe(['mercado' => 10_000])
+        ->and($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['category'])->toBe('mercado')
+        ->and($breakdown['uncategorized_count'])->toBe(0)
+        ->and($breakdown['uncategorized_total_cents'])->toBe(0)
+        ->and($breakdown['active_categories'])->toBe(['mercado']);
+});
+
+it('filtra por duas categorias somando as duas, nao uma nem todas', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 10_000,
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 5_000,
+        'billed_at' => '2026-07-15',
+        'category' => ExpenseCategory::Casa,
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 2_000,
+        'billed_at' => '2026-07-20',
+        'category' => ExpenseCategory::Outros,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: ['mercado', 'casa'],
+    );
+
+    expect(collect($breakdown['categories'])->pluck('category')->sort()->values()->all())->toBe(['casa', 'mercado'])
+        ->and(collect($breakdown['categories'])->sum('total_cents'))->toBe(15_000)
+        ->and($breakdown['entries'])->toHaveCount(2);
+});
+
+it('filtra por sem-categoria isolando so os gastos sem categoria', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 10_000,
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 3_000,
+        'billed_at' => '2026-07-15',
+        'category' => null,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: [BuildSpendingBreakdown::UNCATEGORIZED_CATEGORY],
+    );
+
+    expect(collect($breakdown['categories'])->pluck('category')->all())->toBe(['sem-categoria'])
+        ->and(collect($breakdown['categories'])->sum('total_cents'))->toBe(3_000)
+        ->and($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['category'])->toBeNull()
+        ->and($breakdown['uncategorized_count'])->toBe(1)
+        ->and($breakdown['uncategorized_total_cents'])->toBe(3_000);
+});
+
+it('mantem no chip a categoria filtrada mesmo quando ela zera no mes', function (): void {
+    $user = User::factory()->create();
+
+    // Mercado so tem gasto em junho; em julho o filtro por mercado precisa
+    // continuar oferecendo o chip "Mercado" (senao o usuario nao consegue
+    // desmarca-lo), mas casa - que tem gasto em julho e nao esta filtrada -
+    // continua na lista normalmente.
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 10_000,
+        'billed_at' => '2026-06-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 4_000,
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Casa,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: ['mercado'],
+    );
+
+    $available = collect($breakdown['available_categories'])->keyBy('category');
+
+    expect($available->has('mercado'))->toBeTrue()
+        ->and($available->get('mercado')['total_cents'])->toBe(0)
+        ->and($available->has('casa'))->toBeTrue()
+        ->and($available->get('casa')['total_cents'])->toBe(4_000)
+        // Os quatro blocos, porem, continuam vazios: mercado nao teve gasto
+        // em julho, entao o filtro isola um mes sem resultado.
+        ->and($breakdown['categories'])->toBe([])
+        ->and($breakdown['entries'])->toBe([]);
+});
+
 it('aponta a entrada da parcela para a compra, nao para a parcela', function (): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create(['closing_day' => 1, 'due_day' => 10]);

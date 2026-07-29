@@ -19,7 +19,11 @@ class SpendingController extends Controller
     public function index(Request $request, BuildSpendingBreakdown $buildSpendingBreakdown): Response
     {
         return Inertia::render('spending/index', [
-            'breakdown' => $buildSpendingBreakdown->handle($request->user(), $this->selectedMonth($request)),
+            'breakdown' => $buildSpendingBreakdown->handle(
+                $request->user(),
+                $this->selectedMonth($request),
+                categoryFilter: $this->categoryFilter($request),
+            ),
             'categories' => array_map(
                 fn (ExpenseCategory $category): array => [
                     'value' => $category->value,
@@ -94,5 +98,34 @@ class SpendingController extends Controller
         }
 
         return CarbonImmutable::create((int) $matches[1], $number, 1);
+    }
+
+    /**
+     * Le o filtro de categoria da url (?categorias=mercado,sem-categoria) e
+     * descarta em silencio qualquer valor que nao seja uma categoria valida
+     * ou o balde "sem categoria": mesma regra do mes invalido, o parametro
+     * vem da barra de enderecos e uma categoria inexistente nao pode derrubar
+     * a tela nem virar erro de validacao.
+     *
+     * O retorno segue a ordem canonica do enum (com "sem-categoria" por
+     * ultimo), nao a ordem em que apareceu na url, para que active_categories
+     * saia deterministico independente de como o link foi montado.
+     *
+     * @return array<int, string>
+     */
+    private function categoryFilter(Request $request): array
+    {
+        $raw = $request->query('categorias');
+
+        if (! is_string($raw) || $raw === '') {
+            return [];
+        }
+
+        $requested = array_map('trim', explode(',', $raw));
+
+        return collect([...ExpenseCategory::values(), BuildSpendingBreakdown::UNCATEGORIZED_CATEGORY])
+            ->filter(fn (string $candidate): bool => in_array($candidate, $requested, true))
+            ->values()
+            ->all();
     }
 }

@@ -48,6 +48,120 @@ it('usa o mes informado na url quando ele e valido', function (): void {
             ->where('breakdown.month', '2026-03'));
 });
 
+it('filtra a tela de gastos pela categoria informada na url', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => '2026-07-15',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'categorias' => 'mercado']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('breakdown.categories', 1)
+            ->where('breakdown.categories.0.category', 'mercado')
+            ->where('breakdown.active_categories', ['mercado']));
+});
+
+it('ignora silenciosamente uma categoria inexistente na url', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'categorias' => 'criptomoedas']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('breakdown.categories', 1)
+            ->where('breakdown.active_categories', []));
+});
+
+it('mistura categoria valida e invalida na url mantendo so a valida', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'categorias' => 'mercado,criptomoedas']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.active_categories', ['mercado'])
+            ->has('breakdown.categories', 1)
+            ->where('breakdown.categories.0.category', 'mercado'));
+});
+
+it('aplica o filtro de categoria sem mes na url e o mes sem filtro na url', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => CarbonImmutable::now(),
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => CarbonImmutable::now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['categorias' => 'mercado']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.month', CarbonImmutable::now()->format('Y-m'))
+            ->where('breakdown.active_categories', ['mercado'])
+            ->has('breakdown.categories', 1));
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.active_categories', []));
+});
+
+it('preserva o filtro de categoria ao trocar de mes', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-06-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-06', 'categorias' => 'mercado']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.month', '2026-06')
+            ->where('breakdown.active_categories', ['mercado'])
+            ->has('breakdown.categories', 1));
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'categorias' => 'mercado']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('breakdown.month', '2026-07')
+            ->where('breakdown.active_categories', ['mercado'])
+            ->has('breakdown.categories', 1)
+            ->where('breakdown.categories.0.category', 'mercado'));
+});
+
 it('troca a categoria de uma compra a vista e marca como manual', function (): void {
     $user = User::factory()->create();
     $cash = CashPurchase::factory()->forUser($user)->create(['category' => ExpenseCategory::Outros]);
