@@ -19,8 +19,9 @@ import type {
     SpendingBreakdown,
     SpendingEntry,
 } from '@/types';
+import { UNCATEGORIZED_CATEGORY_KEY } from '@/types/parcelamentos';
 
-const NO_CATEGORY = 'sem-categoria';
+const NO_CATEGORY = UNCATEGORIZED_CATEGORY_KEY;
 
 type SpendingProps = {
     breakdown: SpendingBreakdown;
@@ -45,6 +46,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         month,
         entries,
         uncategorized_count: uncategorizedCount,
+        uncategorized_total_cents: uncategorizedTotalCents,
+        uncategorized_color: uncategorizedColor,
     } = breakdown;
 
     function goToMonth(target: string) {
@@ -110,12 +113,15 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                         <AlertTitle>
                             {uncategorizedCount === 1
                                 ? '1 gasto sem categoria'
-                                : `${uncategorizedCount} gastos sem categoria`}
+                                : `${uncategorizedCount} gastos sem categoria`}{' '}
+                            ({formatBRL(uncategorizedTotalCents)})
                         </AlertTitle>
                         <AlertDescription>
                             <p>
-                                Classifique manualmente na lista abaixo ou deixe
-                                a IA sugerir uma categoria para cada um.
+                                Esse valor está contado nos gráficos abaixo,
+                                mas ainda sem categoria própria. Classifique
+                                manualmente na lista abaixo ou deixe a IA
+                                sugerir uma categoria para cada um.
                             </p>
                             <Button
                                 size="sm"
@@ -166,6 +172,7 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                             <CategoryTrendChart
                                 months={breakdown.months}
                                 categories={categories}
+                                uncategorizedColor={uncategorizedColor}
                             />
                         </CardContent>
                     </Card>

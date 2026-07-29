@@ -134,7 +134,16 @@ return [
             'driver' => 'openai',
             'key' => env('OPENAI_API_KEY'),
             'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
-            'store' => env('OPENAI_STORE', true),
+            /*
+             * Padrao false: este app envia descricao de compra do usuario ao
+             * classificar gastos (CategorizeExpensesJob). Com Ollama (o
+             * provider padrao) nada sai da maquina, mas se o usuario trocar
+             * AI_PROVIDER para openai, store=true faria a OpenAI reter essas
+             * descricoes por padrao. Retencao por terceiro tem que ser opt-in
+             * explicito do usuario via OPENAI_STORE=true no .env, nunca o
+             * padrao silencioso.
+             */
+            'store' => env('OPENAI_STORE', false),
         ],
 
         'openai-compatible' => [

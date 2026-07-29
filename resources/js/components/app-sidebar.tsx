@@ -2,7 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
     CalendarRange,
-    ChartPie,
+    ChartColumnStacked,
     CreditCard,
     FileUp,
     FolderGit2,
@@ -57,7 +57,7 @@ const mainNavItems: NavItem[] = [
     {
         title: 'Gastos',
         href: spending.index(),
-        icon: ChartPie,
+        icon: ChartColumnStacked,
     },
 ];
 

@@ -64,6 +64,15 @@ export type ExpenseCategoryOption = {
     color: string;
 };
 
+/**
+ * Chave do balde "sem categoria" dentro de `SpendingMonthTotals.totals` e do
+ * `category` sintetico em `SpendingCategoryTotal`, e mesmo valor usado como
+ * sentinela do "sem categoria" no seletor manual de categoria. Espelha
+ * `BuildSpendingBreakdown::UNCATEGORIZED_CATEGORY` no servidor — não é um
+ * `ExpenseCategory` real.
+ */
+export const UNCATEGORIZED_CATEGORY_KEY = 'sem-categoria';
+
 export type SpendingCategoryTotal = {
     category: string;
     label: string;
@@ -94,6 +103,8 @@ export type SpendingBreakdown = {
     months: SpendingMonthTotals[];
     entries: SpendingEntry[];
     uncategorized_count: number;
+    uncategorized_total_cents: number;
+    uncategorized_color: string;
 };
 
 export type DashboardSummary = {

@@ -73,6 +73,61 @@ it('conta o que esta sem categoria', function (): void {
     expect($breakdown['uncategorized_count'])->toBe(1);
 });
 
+it('soma o valor sem categoria no payload raiz e na serie de meses', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 12_345,
+        'billed_at' => '2026-07-10',
+        'category' => null,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle($user, CarbonImmutable::parse('2026-07-01'));
+
+    $julho = collect($breakdown['months'])->firstWhere('month', '2026-07');
+
+    expect($breakdown['uncategorized_total_cents'])->toBe(12_345)
+        ->and($julho['totals']['sem-categoria'])->toBe(12_345);
+});
+
+it('mantem o total sem categoria de um mes que nao e o selecionado na serie de 12 meses', function (): void {
+    // O caso perigoso do fix 1: um mes fora do selecionado, com gasto sem
+    // categoria, precisa continuar aparecendo na serie do grafico empilhado
+    // com o valor certo — senao aquele mes renderiza mais barato que os
+    // vizinhos, indistinguivel de uma queda real de gasto.
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 8_000,
+        'billed_at' => '2026-03-10',
+        'category' => null,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle($user, CarbonImmutable::parse('2026-07-01'));
+
+    $marco = collect($breakdown['months'])->firstWhere('month', '2026-03');
+
+    expect($marco['totals']['sem-categoria'] ?? null)->toBe(8_000);
+});
+
+it('inclui o balde sem categoria na lista de categorias do mes, com rotulo e cor proprios', function (): void {
+    $user = User::factory()->create();
+
+    CashPurchase::factory()->forUser($user)->create([
+        'amount_cents' => 5_000,
+        'billed_at' => '2026-07-10',
+        'category' => null,
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle($user, CarbonImmutable::parse('2026-07-01'));
+
+    $semCategoria = collect($breakdown['categories'])->firstWhere('category', 'sem-categoria');
+
+    expect($semCategoria)->not->toBeNull()
+        ->and($semCategoria['total_cents'])->toBe(5_000)
+        ->and($semCategoria['label'])->toBe('Sem categoria');
+});
+
 it('nao mistura gasto de outro usuario', function (): void {
     $user = User::factory()->create();
     CashPurchase::factory()->create([

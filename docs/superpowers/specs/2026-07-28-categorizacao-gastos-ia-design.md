@@ -125,7 +125,7 @@ Uma action `BuildSpendingBreakdown`, no formato das actions existentes, entrega:
 
 Seletor de mês no topo, valendo para as barras por categoria e a lista. Gráficos em `recharts`, seguindo `projection-chart.tsx`.
 
-O balde "Sem categoria" é visível e traz botão que enfileira o job para o que ainda não foi classificado.
+O balde "Sem categoria" é visível e traz botão que enfileira o job para o que ainda não foi classificado. Ele entra nas somas dos dois gráficos como um membro neutro, com cor e rótulo próprios (cinza, fora da paleta das treze categorias reais) — nunca é descartado da soma do mês, senão o total exibido ficaria menor que o gasto real por exatamente o que ainda não foi classificado, e um mês com Ollama fora do ar ou fila parada durante uma importação renderizaria como se fosse mais barato que os vizinhos no gráfico de 12 meses. O aviso na tela mostra a contagem **e o valor** do que está sem categoria, não só a contagem.
 
 `PATCH` de categoria marca `category_is_manual` e é autorizado pelo dono do cartão.
 
@@ -148,7 +148,7 @@ Nenhum teste depende de Ollama rodando.
 |---|---|
 | Um modelo 8B classifica errado | Mitigado pela edição manual; sem ela o erro seria permanente |
 | `laravel/ai` é 0.x e vai quebrar em upgrade | Contido no agente e na config; é first-party e segue o ciclo do Laravel |
-| Trocar para Anthropic ou OpenAI envia a descrição das compras a um terceiro | Com Ollama nada sai da máquina. A troca é decisão do usuário, e não é só técnica |
+| Trocar para Anthropic ou OpenAI envia a descrição das compras a um terceiro | Com Ollama nada sai da máquina. A troca é decisão do usuário, e não é só técnica. Para o provider OpenAI especificamente, `store` (retenção da conversa pelo provedor) tem padrão `false` em `config/ai.php` — retenção por terceiro é opt-in explícito via `OPENAI_STORE=true` no `.env`, nunca o padrão silencioso |
 | Dois gastos idênticos no mesmo dia viram um | Consequência aceita do índice único |
 | Fatura real com seção que a fixture não cobre | Verificação manual com os PDFs reais; Itaú e Mercado Pago exigem senha |
 

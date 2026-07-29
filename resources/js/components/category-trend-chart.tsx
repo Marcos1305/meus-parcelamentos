@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { formatBRL, formatBRLCompact, formatMonthLabel } from '@/lib/currency';
 import type { ExpenseCategoryOption, SpendingMonthTotals } from '@/types';
+import { UNCATEGORIZED_CATEGORY_KEY } from '@/types/parcelamentos';
 
 type TrendPoint = { month: string; label: string } & Record<
     string,
@@ -91,18 +92,35 @@ function TrendLegend({ categories }: { categories: ExpenseCategoryOption[] }) {
 }
 
 /**
- * Empilhado, doze categorias na mesma ordem em todos os meses: a ordem vem do
+ * Empilhado, treze categorias na mesma ordem em todos os meses: a ordem vem do
  * enum no servidor, que já foi escolhida para maximizar a distância
  * perceptual entre vizinhos. Reordenar por valor quebraria essa garantia e
  * "repintaria" categorias entre um mês e outro.
+ *
+ * O balde "sem categoria" é acrescentado depois dessas treze, sempre por
+ * último: ele não faz parte da paleta categórica (é cinza neutro, vindo do
+ * servidor) e não deve competir por posição no empilhado como se fosse mais
+ * uma categoria — só entra para que a altura da barra do mês não fique menor
+ * que o gasto real quando parte dele ainda não foi classificada.
  */
 export function CategoryTrendChart({
     months,
     categories,
+    uncategorizedColor,
 }: {
     months: SpendingMonthTotals[];
     categories: ExpenseCategoryOption[];
+    uncategorizedColor: string;
 }) {
+    const allSeries: ExpenseCategoryOption[] = [
+        ...categories,
+        {
+            value: UNCATEGORIZED_CATEGORY_KEY,
+            label: 'Sem categoria',
+            color: uncategorizedColor,
+        },
+    ];
+
     const data: TrendPoint[] = months.map((row) => {
         const [year, monthNumber] = row.month.split('-');
         const shortLabel = formatMonthLabel(row.month).split(' de ')[0];
@@ -112,7 +130,7 @@ export function CategoryTrendChart({
             // Doze meses sempre cruzam um ano; sem isso, janeiro do ano
             // anterior e janeiro do ano corrente ficam com o mesmo texto.
             label: monthNumber === '01' ? `${shortLabel}/${year}` : shortLabel,
-            ...categories.reduce<Record<string, number>>((acc, category) => {
+            ...allSeries.reduce<Record<string, number>>((acc, category) => {
                 acc[category.value] = row.totals[category.value] ?? 0;
 
                 return acc;
@@ -123,7 +141,7 @@ export function CategoryTrendChart({
     const maxStackTotal = Math.max(
         1,
         ...data.map((point) =>
-            categories.reduce(
+            allSeries.reduce(
                 (sum, category) => sum + (Number(point[category.value]) || 0),
                 0,
             ),
@@ -164,9 +182,9 @@ export function CategoryTrendChart({
                     />
                     <Tooltip
                         cursor={{ fill: 'var(--accent)' }}
-                        content={<TrendTooltip categories={categories} />}
+                        content={<TrendTooltip categories={allSeries} />}
                     />
-                    {categories.map((category, index) => (
+                    {allSeries.map((category, index) => (
                         <Bar
                             key={category.value}
                             dataKey={category.value}
@@ -176,7 +194,7 @@ export function CategoryTrendChart({
                             stroke="var(--card)"
                             strokeWidth={2}
                             radius={
-                                index === categories.length - 1
+                                index === allSeries.length - 1
                                     ? [4, 4, 0, 0]
                                     : undefined
                             }
@@ -184,7 +202,7 @@ export function CategoryTrendChart({
                     ))}
                 </BarChart>
             </ResponsiveContainer>
-            <TrendLegend categories={categories} />
+            <TrendLegend categories={allSeries} />
         </div>
     );
 }

@@ -41,10 +41,14 @@ it('nao sobrescreve categoria definida pelo usuario', function (): void {
 });
 
 it('nao atribui categoria a uma linha marcada manual mesmo sem categoria', function (): void {
-    // Uma categoria manual apagada (o usuario decidiu que nao ha categoria e
-    // nao quer que o job tente de novo) ainda passa pelo whereNull('category')
-    // da consulta: quem barra a escrita aqui e o category_is_manual dentro do
-    // laco, nao o filtro da consulta.
+    // Este estado (category null com category_is_manual true) nao e alcancado
+    // pelo app hoje: limpar a categoria pelo seletor manual sempre zera a flag
+    // junto (SpendingController::storeCategory), entao "sem categoria" e
+    // sempre "nao manual" na pratica. O teste existe como defesa em
+    // profundidade: se um caminho futuro algum dia gravar essa combinacao, ela
+    // ainda assim passa pelo whereNull('category') da consulta, e quem barra
+    // a escrita aqui e o category_is_manual dentro do laco, nao o filtro da
+    // consulta.
     $user = User::factory()->create();
     $cash = CashPurchase::factory()->forUser($user)->create([
         'description' => 'Supermercado Extra',
@@ -148,10 +152,16 @@ it('nao enfileira duas vezes para o mesmo usuario enquanto a primeira nao proces
 
 it('define um prazo para o bloqueio de unicidade se curar sozinho', function (): void {
     // Zero (o padrao sem uniqueFor) e "nunca expira" para o Lock: um worker
-    // morto antes de liberar o lock travaria a categorizacao do usuario para
-    // sempre. Precisa ser maior que o timeout do proprio job, senao o
-    // bloqueio expira antes do job e libera um segundo despacho em cima do
-    // primeiro ainda rodando.
+    // morto antes de comecar a processar o job (OOM, deploy, etc., enquanto
+    // o job ainda esta na fila) travaria a categorizacao do usuario para
+    // sempre. Precisa ser maior que o timeout do proprio job para nao expirar
+    // por conta propria antes que o job normalmente teria tempo de comecar a
+    // rodar sozinho.
+    //
+    // Isto nao impede um segundo despacho enquanto o primeiro job ja esta
+    // rodando: com ShouldBeUniqueUntilProcessing o framework libera o lock
+    // assim que o job comeca a processar, independente deste prazo (ver
+    // CategorizeExpensesJob::uniqueFor()).
     $job = new CategorizeExpensesJob(1);
 
     expect($job->uniqueFor())->toBeGreaterThan($job->timeout);

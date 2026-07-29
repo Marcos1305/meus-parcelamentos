@@ -19,6 +19,13 @@ use LogicException;
  * importacao. Assim a importacao e o botao de reprocessar despacham o mesmo
  * job, e uma classificacao que falhou numa fatura e retomada na proxima em vez
  * de ficar orfa.
+ *
+ * ShouldBeUniqueUntilProcessing, e nao ShouldBeUnique: a unicidade termina
+ * quando o job comeca a processar, nao quando termina. Uma importacao que
+ * chegue durante a varredura precisa conseguir enfileirar a propria, senao as
+ * linhas que ela gravou depois da consulta ficariam sem categoria ate alguem
+ * apertar o botao de reprocessar. Ver uniqueFor() para o que isso implica
+ * sobre despachos simultaneos.
  */
 class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -72,13 +79,22 @@ class CategorizeExpensesJob implements ShouldBeUniqueUntilProcessing, ShouldQueu
     }
 
     /**
-     * O prazo existe para o bloqueio se curar sozinho se o worker morrer
-     * (OOM, deploy, etc.) antes de liberar o lock: sem prazo, o cache trata
-     * zero como "nunca expira", e a categorizacao daquele usuario ficaria
-     * travada para sempre, sem erro nem log. 900 do timeout do job mais
-     * folga: precisa ser maior que $timeout, senao o bloqueio expiraria
-     * antes do proprio job, permitindo um segundo despacho enquanto o
-     * primeiro ainda roda.
+     * O prazo existe para o lock se curar sozinho se o worker morrer (OOM,
+     * deploy, etc.) enquanto o job ainda esta na fila, antes de comecar a
+     * processar: sem prazo, o cache trata zero como "nunca expira", e a
+     * categorizacao daquele usuario ficaria travada para sempre, sem erro nem
+     * log. 900 do timeout do job mais folga: precisa ser maior que $timeout
+     * para nao expirar por conta propria antes que o job normalmente teria
+     * tempo de comecar a rodar e liberar o lock sozinho.
+     *
+     * O que isto NAO faz: nao impede um segundo despacho enquanto o primeiro
+     * ja esta rodando. Com ShouldBeUniqueUntilProcessing o framework libera o
+     * lock no instante em que o job comeca a processar — dentro do ->then()
+     * de CallQueuedHandler::dispatchThroughMiddleware(), imediatamente antes
+     * do dispatchNow() — independente do valor devolvido aqui. Um segundo
+     * "Categorizar automaticamente" clicado enquanto uma varredura roda e
+     * permitido de proposito (ver o docblock da classe); o prazo desta
+     * funcao so cobre a janela entre o despacho e o job comecar a rodar.
      *
      * Precisa ser metodo, nao propriedade: o framework le o bloqueio via
      * `method_exists($job, 'uniqueFor')`, e uma propriedade publica do mesmo

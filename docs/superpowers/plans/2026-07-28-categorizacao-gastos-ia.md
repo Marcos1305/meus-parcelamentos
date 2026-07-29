@@ -2235,6 +2235,8 @@ git commit -m "feat: job de categorizacao de gastos"
 
 A action que responde pelos números da tela. Regime de caixa: à vista soma pelo mês de `billed_at`, parcela soma pelo mês do próprio vencimento.
 
+**Emenda pós-revisão (fix 1 da revisão final de branch):** a versão abaixo, escrita nesta task, descartava todo gasto sem categoria (`if ($category === null) { continue; }` em `categories()` e `series()`), expondo só `uncategorized_count`. Isso era um gap do próprio plano, não um desvio da implementação: os dois gráficos ficavam com o total do mês menor que o gasto real por exatamente o que não tinha categoria ainda — no gráfico de 12 meses isso é indistinguível de uma queda real de gasto. A implementação final trata o balde "sem categoria" como membro normal das somas (chave sintética `UNCATEGORIZED_CATEGORY`, cor e rótulo próprios, fora da paleta das treze categorias), e o payload ganhou `uncategorized_total_cents` e `uncategorized_color` ao lado de `uncategorized_count`. Ver `app/Actions/BuildSpendingBreakdown.php` para o código real.
+
 **Files:**
 - Create: `app/Actions/BuildSpendingBreakdown.php`
 - Test: `tests/Feature/BuildSpendingBreakdownTest.php`
@@ -3043,6 +3045,8 @@ export type SpendingBreakdown = {
     uncategorized_count: number;
 };
 ```
+
+**Emenda pós-revisão (fix 1 da revisão final de branch):** `SpendingBreakdown` ganhou `uncategorized_total_cents: number` e `uncategorized_color: string` — ver a emenda da Task 11. O item 6 abaixo (aviso só com a contagem) também mudou: o aviso mostra a contagem **e o valor**. Ver `resources/js/types/parcelamentos.ts` e `resources/js/pages/spending/index.tsx` para a forma final.
 
 - [ ] **Step 4: Escrever a página**
 
