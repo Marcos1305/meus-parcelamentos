@@ -1643,6 +1643,20 @@ Em `resources/js/pages/invoices/review.tsx`, adicionar `cash_lines_count: number
 
 > Gravar 53 registros sem dizer nada ao usuário seria desonesto. Esta linha é o aviso mínimo.
 
+**E o botão de confirmar precisa habilitar.** Hoje ele é `disabled={selectedCount === 0 || form.processing}`, o que trava a tela para sempre numa fatura sem nenhuma parcelada — justamente o caso que esta task acabou de abrir no servidor. Sem isso, o caminho de fatura só com compras à vista existe no backend e é inalcançável pela interface.
+
+```tsx
+disabled={(selectedCount === 0 && cash_lines_count === 0) || form.processing}
+```
+
+E o rótulo precisa dizer a verdade sobre o que vai acontecer:
+
+```tsx
+{selectedCount > 0
+    ? `Importar ${selectedCount} ${selectedCount === 1 ? 'compra' : 'compras'}`
+    : 'Salvar as compras à vista'}
+```
+
 - [ ] **Step 10: Rodar os testes**
 
 ```bash
