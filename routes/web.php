@@ -15,4 +15,5 @@ if (app()->environment(['local', 'testing'])) {
 
 require __DIR__.'/parcelamentos.php';
 require __DIR__.'/planejamento.php';
+require __DIR__.'/gastos.php';
 require __DIR__.'/settings.php';
