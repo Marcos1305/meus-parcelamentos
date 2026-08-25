@@ -132,3 +132,57 @@ it('nega apagar compra de outro usuario', function (): void {
 
     expect(Purchase::count())->toBe(1);
 });
+
+it('grava a observacao no lancamento manual', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->post(route('purchases.store'), [
+            'card_id' => $card->id,
+            'description' => 'Sofá',
+            'notes' => 'Dividido com o João, ele paga metade em janeiro.',
+            'total_amount_cents' => 300_000,
+            'installments_count' => 10,
+            'purchased_at' => '2026-03-02',
+        ])
+        ->assertRedirect(route('dashboard'));
+
+    expect(Purchase::sole()->notes)->toBe('Dividido com o João, ele paga metade em janeiro.');
+});
+
+it('grava null quando a observacao vem vazia ou so com espacos', function (string $notes): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->post(route('purchases.store'), [
+            'card_id' => $card->id,
+            'description' => 'Sofá',
+            'notes' => $notes,
+            'total_amount_cents' => 300_000,
+            'installments_count' => 10,
+            'purchased_at' => '2026-03-02',
+        ])
+        ->assertRedirect(route('dashboard'));
+
+    expect(Purchase::sole()->notes)->toBeNull();
+})->with(['', '   ', "\n\t "]);
+
+it('recusa observacao acima do limite', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->post(route('purchases.store'), [
+            'card_id' => $card->id,
+            'description' => 'Sofá',
+            'notes' => str_repeat('a', Purchase::MAX_NOTES_LENGTH + 1),
+            'total_amount_cents' => 300_000,
+            'installments_count' => 10,
+            'purchased_at' => '2026-03-02',
+        ])
+        ->assertSessionHasErrors('notes');
+
+    expect(Purchase::count())->toBe(0);
+});

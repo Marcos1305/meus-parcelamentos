@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Concerns\NormalizesNotes;
 use App\Models\Purchase;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,6 +10,13 @@ use Illuminate\Validation\Rule;
 
 class StorePurchaseRequest extends FormRequest
 {
+    use NormalizesNotes;
+
+    protected function prepareForValidation(): void
+    {
+        $this->normalizeNotes();
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -23,6 +31,7 @@ class StorePurchaseRequest extends FormRequest
             ],
             'description' => ['required', 'string', 'max:'.Purchase::MAX_DESCRIPTION_LENGTH],
             'merchant' => ['nullable', 'string', 'max:'.Purchase::MAX_DESCRIPTION_LENGTH],
+            'notes' => ['nullable', 'string', 'max:'.Purchase::MAX_NOTES_LENGTH],
             'total_amount_cents' => ['required', 'integer', 'min:1'],
             'installments_count' => ['required', 'integer', 'between:1,'.Purchase::MAX_INSTALLMENTS_COUNT],
             'purchased_at' => ['required', 'date', 'before_or_equal:today'],
