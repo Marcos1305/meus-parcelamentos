@@ -12,19 +12,22 @@ use Illuminate\Http\Request;
 class BuildHistoryQuery
 {
     /**
-     * @return array{month: string, status: string, card: string}
+     * @return array{month: string, status: string, card: string, q: string}
      */
     public function filters(Request $request): array
     {
+        $term = $request->query('q', '');
+
         return [
             'month' => (string) $request->query('month', CarbonImmutable::now()->format('Y-m')),
             'status' => (string) $request->query('status', 'all'),
             'card' => (string) $request->query('card', 'all'),
+            'q' => is_string($term) ? trim($term) : '',
         ];
     }
 
     /**
-     * @param  array{month: string, status: string, card: string}  $filters
+     * @param  array{month: string, status: string, card: string, q: string}  $filters
      * @return Builder<Installment>
      */
     public function handle(User $user, array $filters): Builder
@@ -47,6 +50,15 @@ class BuildHistoryQuery
                 'purchase',
                 fn (Builder $purchases) => $purchases->where('card_id', (int) $filters['card']),
             );
+        }
+
+        if ($filters['q'] !== '') {
+            $term = '%'.$filters['q'].'%';
+
+            $query->whereHas('purchase', fn (Builder $purchases) => $purchases
+                ->where('description', 'like', $term)
+                ->orWhere('merchant', 'like', $term)
+                ->orWhere('notes', 'like', $term));
         }
 
         $today = CarbonImmutable::now();

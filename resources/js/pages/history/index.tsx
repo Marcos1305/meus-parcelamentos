@@ -1,11 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { ProjectionChart } from '@/components/projection-chart';
 import { PurchaseNotesDialog } from '@/components/purchase-notes-dialog';
 import { StatusChip } from '@/components/status-chip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -46,6 +48,26 @@ export default function History({
     cards,
     months,
 }: HistoryProps) {
+    const [term, setTerm] = useState(filters.q);
+
+    // Debounce de 300ms: sem ele cada tecla vira uma requisição e a lista
+    // pisca. `replace` evita empilhar uma entrada de histórico por letra.
+    useEffect(() => {
+        if (term === filters.q) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            router.get(
+                index().url,
+                { ...filters, q: term },
+                { preserveState: true, replace: true },
+            );
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [term, filters]);
+
     function applyFilter(key: keyof HistoryFilters, value: string) {
         router.get(
             index().url,
@@ -125,6 +147,14 @@ export default function History({
                 </div>
 
                 <div className="flex flex-wrap gap-3">
+                    <Input
+                        value={term}
+                        onChange={(event) => setTerm(event.target.value)}
+                        placeholder="Buscar por descrição, loja ou observação"
+                        aria-label="Buscar parcelamentos"
+                        className="w-[320px]"
+                    />
+
                     <Select
                         value={filters.month}
                         onValueChange={(value) => applyFilter('month', value)}

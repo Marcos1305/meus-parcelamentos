@@ -169,6 +169,7 @@ export type HistoryFilters = {
     month: string;
     status: string;
     card: string;
+    q: string;
 };
 
 export type FinanceTip = {

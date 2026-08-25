@@ -142,3 +142,65 @@ it('mantem os totais do topo globais, sem responder ao filtro', function (): voi
 it('exige autenticacao para o historico', function (): void {
     $this->get(route('history.index'))->assertRedirect(route('login'));
 });
+
+it('busca por descricao, estabelecimento e observacao', function (string $termo): void {
+    $user = historyUser();
+    $alvo = installmentFor($user, '2026-07-10', 100_00);
+    $alvo->purchase->update([
+        'description' => 'Sofá de canto',
+        'merchant' => 'Tok Stok',
+        'notes' => 'Dividido com o João',
+    ]);
+
+    $outro = installmentFor($user, '2026-07-11', 100_00);
+    $outro->purchase->update([
+        'description' => 'Tênis',
+        'merchant' => 'Centauro',
+        'notes' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => $termo]))
+        ->assertInertia(fn ($page) => $page
+            ->has('installments.data', 1)
+            ->where('installments.data.0.purchase.description', 'Sofá de canto')
+            ->where('filters.q', $termo));
+})->with(['Sofá', 'Tok', 'João']);
+
+it('ignora maiusculas na busca', function (): void {
+    $user = historyUser();
+    $alvo = installmentFor($user, '2026-07-10', 100_00);
+    $alvo->purchase->update(['description' => 'Sofa de canto', 'merchant' => null, 'notes' => null]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => 'SOFA']))
+        ->assertInertia(fn ($page) => $page->has('installments.data', 1));
+});
+
+it('combina a busca com os filtros de mes e cartao', function (): void {
+    $user = historyUser();
+    $card = Card::factory()->for($user)->create();
+
+    $julho = installmentFor($user, '2026-07-10', 100_00, $card);
+    $julho->purchase->update(['description' => 'Sofá', 'merchant' => null, 'notes' => null]);
+
+    $agosto = installmentFor($user, '2026-08-10', 100_00, $card);
+    $agosto->purchase->update(['description' => 'Sofá', 'merchant' => null, 'notes' => null]);
+
+    $outroCartao = installmentFor($user, '2026-07-10', 100_00);
+    $outroCartao->purchase->update(['description' => 'Sofá', 'merchant' => null, 'notes' => null]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => 'Sofá', 'month' => '2026-07', 'card' => $card->id]))
+        ->assertInertia(fn ($page) => $page->has('installments.data', 1));
+});
+
+it('devolve lista vazia quando a busca nao casa nada', function (): void {
+    $user = historyUser();
+    installmentFor($user, '2026-07-10', 100_00);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => 'zzzzzz']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->has('installments.data', 0));
+});

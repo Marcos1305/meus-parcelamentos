@@ -98,3 +98,17 @@ it('exporta a observacao numa coluna propria', function (): void {
     expect($csv)->toContain('observacao')
         ->and($csv)->toContain('Garantia até 2028.');
 });
+
+it('exporta apenas o que casa com a busca', function (): void {
+    $user = User::factory()->create();
+    $alvo = exportInstallment($user, '2026-07-10', 100_00);
+    $alvo->purchase->update(['description' => 'Sofá de canto']);
+
+    $outro = exportInstallment($user, '2026-07-11', 100_00);
+    $outro->purchase->update(['description' => 'Tênis Nike']);
+
+    $csv = csvFrom($this->actingAs($user)->get(route('history.export', ['q' => 'Sofá'])));
+
+    expect($csv)->toContain('Sofá de canto')
+        ->and($csv)->not->toContain('Tênis Nike');
+});
