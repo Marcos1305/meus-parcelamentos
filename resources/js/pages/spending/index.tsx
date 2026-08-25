@@ -182,8 +182,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                         </AlertTitle>
                         <AlertDescription>
                             <p>
-                                Esse valor está contado nos gráficos abaixo,
-                                mas ainda sem categoria própria. Classifique
+                                Esse valor está contado nos gráficos abaixo, mas
+                                ainda sem categoria própria. Classifique
                                 manualmente na lista abaixo ou deixe a IA
                                 sugerir uma categoria para cada um.
                             </p>
@@ -215,8 +215,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                                 {isFiltered && (
                                     <CardDescription>
                                         Subtotal das categorias selecionadas:{' '}
-                                        {formatBRL(filteredTotalCents)}. Não é
-                                        o total do mês.
+                                        {formatBRL(filteredTotalCents)}. Não é o
+                                        total do mês.
                                     </CardDescription>
                                 )}
                             </CardHeader>
@@ -240,8 +240,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                             <CardTitle>Últimos 12 meses</CardTitle>
                             {isFiltered && (
                                 <CardDescription>
-                                    Evolução apenas das categorias
-                                    selecionadas — não é o total do mês.
+                                    Evolução apenas das categorias selecionadas
+                                    — não é o total do mês.
                                 </CardDescription>
                             )}
                         </CardHeader>
