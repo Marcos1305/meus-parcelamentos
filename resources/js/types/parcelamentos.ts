@@ -123,6 +123,8 @@ export type SpendingBreakdown = {
      * inteiro.
      */
     search: string;
+    sort: string;
+    direction: 'asc' | 'desc';
 };
 
 export type DashboardSummary = {

@@ -396,3 +396,73 @@ it('a busca ignora maiusculas e casa parte da descricao', function (string $term
 
     expect($breakdown['entries'])->toHaveCount(1);
 })->with(['PADARIA', 'padaria', 'daria do']);
+
+function gastosDeJulho(User $user): void
+{
+    $card = Card::factory()->for($user)->create(['name' => 'Zeta']);
+    $outro = Card::factory()->for($user)->create(['name' => 'Alfa']);
+
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Zebra',
+        'amount_cents' => 10_00,
+        'purchased_at' => '2026-07-20',
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Transporte,
+    ]);
+
+    CashPurchase::factory()->for($outro)->create([
+        'description' => 'Abacate',
+        'amount_cents' => 500_00,
+        'purchased_at' => '2026-07-02',
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+}
+
+it('ordena as entries de gastos pela coluna pedida', function (string $ordem, string $direcao, string $primeiro): void {
+    $user = User::factory()->create();
+    gastosDeJulho($user);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: $ordem,
+        direction: $direcao,
+    );
+
+    expect($breakdown['entries'][0]['description'])->toBe($primeiro);
+})->with([
+    ['descricao', 'asc', 'Abacate'],
+    ['descricao', 'desc', 'Zebra'],
+    ['cartao', 'asc', 'Abacate'],
+    ['cartao', 'desc', 'Zebra'],
+    ['data', 'desc', 'Zebra'],
+    ['data', 'asc', 'Abacate'],
+    ['valor', 'desc', 'Abacate'],
+    ['valor', 'asc', 'Zebra'],
+]);
+
+it('joga o gasto sem categoria para o fim ao ordenar por categoria', function (): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Sem rótulo',
+        'category' => null,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Com rótulo',
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: 'categoria',
+        direction: 'asc',
+    );
+
+    expect($breakdown['entries'][1]['description'])->toBe('Sem rótulo');
+});

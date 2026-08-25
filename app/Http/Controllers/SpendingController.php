@@ -24,6 +24,8 @@ class SpendingController extends Controller
                 $this->selectedMonth($request),
                 categoryFilter: $this->categoryFilter($request),
                 search: $this->search($request),
+                sort: $this->sort($request),
+                direction: $this->direction($request),
             ),
             'categories' => array_map(
                 fn (ExpenseCategory $category): array => [
@@ -141,5 +143,23 @@ class SpendingController extends Controller
         $term = $request->query('busca');
 
         return is_string($term) ? trim($term) : '';
+    }
+
+    /**
+     * Coluna fora da lista branca cai no default em silencio, como o mes e a
+     * categoria: e parametro de url, nao entrada de formulario.
+     */
+    private function sort(Request $request): string
+    {
+        $sort = $request->query('ordem');
+
+        return is_string($sort) && in_array($sort, BuildSpendingBreakdown::SORTABLE_COLUMNS, true) ? $sort : 'valor';
+    }
+
+    private function direction(Request $request): string
+    {
+        $direction = $request->query('direcao');
+
+        return is_string($direction) && in_array($direction, ['asc', 'desc'], true) ? $direction : 'desc';
     }
 }

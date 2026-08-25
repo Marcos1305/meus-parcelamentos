@@ -26,6 +26,12 @@ class BuildSpendingBreakdown
      */
     public const UNCATEGORIZED_CATEGORY = 'sem-categoria';
 
+    /**
+     * Colunas ordenaveis da lista, na nomenclatura em portugues que a tela de
+     * gastos ja usa na url (mes, categorias, busca).
+     */
+    public const array SORTABLE_COLUMNS = ['descricao', 'cartao', 'data', 'valor', 'categoria'];
+
     private const UNCATEGORIZED_LABEL = 'Sem categoria';
 
     /**
@@ -75,6 +81,8 @@ class BuildSpendingBreakdown
      *
      * @param  array<int, string>  $categoryFilter  chaves ja validadas pelo controller (ExpenseCategory::values() + self::UNCATEGORIZED_CATEGORY); vazio significa "todas"
      * @param  string  $search  termo livre casado contra a descricao; vazio significa "sem busca"
+     * @param  string  $sort  coluna de ordenacao ja validada pelo controller (self::SORTABLE_COLUMNS)
+     * @param  string  $direction  'asc' ou 'desc', ja validada pelo controller
      * @return array{
      *   month: string,
      *   categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
@@ -86,9 +94,11 @@ class BuildSpendingBreakdown
      *   active_categories: array<int, string>,
      *   available_categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
      *   search: string,
+     *   sort: string,
+     *   direction: string,
      * }
      */
-    public function handle(User $user, CarbonImmutable $month, int $months = 12, array $categoryFilter = [], string $search = ''): array
+    public function handle(User $user, CarbonImmutable $month, int $months = 12, array $categoryFilter = [], string $search = '', string $sort = 'valor', string $direction = 'desc'): array
     {
         $start = $month->startOfMonth();
         $seriesStart = $start->subMonths($months - 1);
@@ -115,13 +125,15 @@ class BuildSpendingBreakdown
             'month' => $start->format('Y-m'),
             'categories' => $this->categories($cash, $installments, $start),
             'months' => $this->series($cash, $installments, $seriesStart, $months),
-            'entries' => $this->entries($cash, $installments, $start, $search),
+            'entries' => $this->entries($cash, $installments, $start, $search, $sort, $direction),
             'uncategorized_count' => $this->uncategorizedCount($cash, $installments, $start),
             'uncategorized_total_cents' => $this->uncategorizedTotalCents($cash, $installments, $start),
             'uncategorized_color' => self::UNCATEGORIZED_COLOR,
             'active_categories' => $categoryFilter,
             'available_categories' => $this->availableCategories($cashAll, $installmentsAll, $start, $categoryFilter),
             'search' => $search,
+            'sort' => $sort,
+            'direction' => $direction,
         ];
     }
 
@@ -246,9 +258,11 @@ class BuildSpendingBreakdown
      * @param  Collection<int, CashPurchase>  $cash
      * @param  Collection<int, Installment>  $installments
      * @param  string  $search  termo ja normalizado pelo controller; vazio significa "sem busca"
+     * @param  string  $sort  coluna de ordenacao (self::SORTABLE_COLUMNS)
+     * @param  string  $direction  'asc' ou 'desc'
      * @return array<int, array{id: int, kind: string, description: string, amount_cents: int, purchased_at: string, installment_label: string|null, category: string|null, category_is_manual: bool, card_name: string}>
      */
-    private function entries(Collection $cash, Collection $installments, CarbonImmutable $month, string $search = ''): array
+    private function entries(Collection $cash, Collection $installments, CarbonImmutable $month, string $search = '', string $sort = 'valor', string $direction = 'desc'): array
     {
         $entries = [];
 
@@ -299,9 +313,30 @@ class BuildSpendingBreakdown
             ));
         }
 
-        usort($entries, fn (array $a, array $b): int => $b['amount_cents'] <=> $a['amount_cents']);
+        $signal = $direction === 'asc' ? 1 : -1;
+
+        usort($entries, fn (array $a, array $b): int => $signal * match ($sort) {
+            'descricao' => strnatcasecmp($a['description'], $b['description']),
+            'cartao' => strnatcasecmp($a['card_name'], $b['card_name']),
+            'data' => strcmp($a['purchased_at'], $b['purchased_at']),
+            'categoria' => strnatcasecmp($this->categoryLabel($a['category']), $this->categoryLabel($b['category'])),
+            default => $a['amount_cents'] <=> $b['amount_cents'],
+        });
 
         return $entries;
+    }
+
+    /**
+     * Rotulo usado so para ordenar. O prefixo do balde "sem categoria" e um
+     * caractere alto de proposito: ordenar alfabeticamente colocaria "Sem
+     * categoria" no meio da lista, e o que o usuario quer ver junto e o que
+     * ainda falta classificar — no fim, num bloco so.
+     */
+    private function categoryLabel(?string $category): string
+    {
+        return $category === null
+            ? '~~~'
+            : ExpenseCategory::from($category)->label();
     }
 
     /**

@@ -4,6 +4,8 @@ import { CategoryBreakdownChart } from '@/components/category-breakdown-chart';
 import { CategoryFilterChips } from '@/components/category-filter-chips';
 import { CategoryTrendChart } from '@/components/category-trend-chart';
 import { EmptyState } from '@/components/empty-state';
+import { SortableHeader } from '@/components/sortable-header';
+import type { SortDirection } from '@/components/sortable-header';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,17 +52,28 @@ function categoryRoute(entry: SpendingEntry): string {
         : spending.purchaseCategory(entry.id).url;
 }
 
+const SPENDING_SORT_DEFAULTS: Record<string, SortDirection> = {
+    descricao: 'asc',
+    cartao: 'asc',
+    data: 'desc',
+    valor: 'desc',
+    categoria: 'asc',
+};
+
 /**
- * Mes, filtro de categoria e busca vivem juntos na url e cada um sobrevive a
- * troca dos outros: navegar de mes preserva `categorias` e `busca`, e
- * marcar/desmarcar um chip preserva `mes` e `busca`. Omitir `categorias` e
- * `busca` quando vazios (em vez de mandar uma string vazia) mantem a url
- * limpa no caso comum de "sem filtro".
+ * Mes, filtro de categoria, busca e ordenacao vivem juntos na url e cada um
+ * sobrevive a troca dos outros: navegar de mes preserva `categorias`, `busca`
+ * e a ordenacao, e marcar/desmarcar um chip preserva `mes`, `busca` e a
+ * ordenacao. Omitir `categorias` e `busca` quando vazios (em vez de mandar
+ * uma string vazia), e `ordem`/`direcao` quando sao o default valor/desc,
+ * mantem a url limpa no caso comum de "sem filtro, sem ordenacao custom".
  */
 function spendingQuery(
     targetMonth: string,
     activeCategories: string[],
     search: string,
+    sort: string,
+    direction: SortDirection,
 ): Record<string, string> {
     const query: Record<string, string> = { mes: targetMonth };
 
@@ -70,6 +83,11 @@ function spendingQuery(
 
     if (search !== '') {
         query.busca = search;
+    }
+
+    if (sort !== 'valor' || direction !== 'desc') {
+        query.ordem = sort;
+        query.direcao = direction;
     }
 
     return query;
@@ -85,6 +103,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         active_categories: activeCategories,
         available_categories: availableCategories,
         search,
+        sort,
+        direction,
     } = breakdown;
 
     const isFiltered = activeCategories.length > 0;
@@ -118,7 +138,13 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         const timer = setTimeout(() => {
             router.get(
                 spending.index({
-                    query: spendingQuery(month, activeCategories, term),
+                    query: spendingQuery(
+                        month,
+                        activeCategories,
+                        term,
+                        sort,
+                        direction,
+                    ),
                 }).url,
                 {},
                 { preserveState: true, replace: true },
@@ -126,11 +152,17 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [term, search, month, activeCategories]);
+    }, [term, search, month, activeCategories, sort, direction]);
 
     function goToMonth(target: string) {
         return spending.index({
-            query: spendingQuery(target, activeCategories, search),
+            query: spendingQuery(
+                target,
+                activeCategories,
+                search,
+                sort,
+                direction,
+            ),
         });
     }
 
@@ -139,8 +171,22 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
             ? activeCategories.filter((value) => value !== category)
             : [...activeCategories, category];
 
-        return spending.index({ query: spendingQuery(month, next, search) })
-            .url;
+        return spending.index({
+            query: spendingQuery(month, next, search, sort, direction),
+        }).url;
+    }
+
+    function sortHref(column: string) {
+        const next: SortDirection =
+            sort === column
+                ? direction === 'asc'
+                    ? 'desc'
+                    : 'asc'
+                : (SPENDING_SORT_DEFAULTS[column] ?? 'asc');
+
+        return spending.index({
+            query: spendingQuery(month, activeCategories, search, column, next),
+        }).url;
     }
 
     function changeCategory(entry: SpendingEntry, value: string) {
@@ -313,13 +359,43 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     <Card>
                         <CardContent className="overflow-x-auto p-0">
                             <table className="w-full text-sm">
-                                <thead className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
+                                <thead className="border-b text-left">
                                     <tr>
-                                        <th className="p-3">Descrição</th>
-                                        <th className="p-3">Cartão</th>
-                                        <th className="p-3">Data</th>
-                                        <th className="p-3">Valor</th>
-                                        <th className="p-3">Categoria</th>
+                                        <SortableHeader
+                                            column="descricao"
+                                            label="Descrição"
+                                            active={sort}
+                                            direction={direction}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="cartao"
+                                            label="Cartão"
+                                            active={sort}
+                                            direction={direction}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="data"
+                                            label="Data"
+                                            active={sort}
+                                            direction={direction}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="valor"
+                                            label="Valor"
+                                            active={sort}
+                                            direction={direction}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="categoria"
+                                            label="Categoria"
+                                            active={sort}
+                                            direction={direction}
+                                            href={sortHref}
+                                        />
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
