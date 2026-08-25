@@ -84,9 +84,17 @@ O payload devolve `search` junto de `active_categories`, para a tela repopular o
 
 Estado vazio: quando a busca não casa nada, a mensagem do `EmptyState` diz que nenhum gasto casou com o termo — distinto de "nenhum gasto neste mês" e de "nenhum gasto nas categorias selecionadas", que já existem.
 
-### Limitação aceita: acentos
+### Limitação aceita: acentos — e, no Histórico, maiúsculas em letra acentuada
 
-O banco é SQLite. `LIKE` ignora maiúsculas para ASCII, mas não dobra acentos: buscar `acai` não encontra "Açaí". Resolver exigiria uma coluna normalizada mantida na escrita, e o custo não se paga num app de usuário único que digita o que está vendo na tela. Fica registrado como limitação conhecida, não como defeito.
+O banco é SQLite, e as duas telas casam o termo por caminhos diferentes. A limitação, por isso, tem tamanhos diferentes em cada uma.
+
+Em **Gastos** o casamento acontece em PHP (`mb_strtolower` + `str_contains`): insensível a maiúsculas em qualquer letra, acentuada ou não — `AÇAÍ` encontra "Açaí" —, mas não insensível a acento: `acai` não encontra "Açaí".
+
+No **Histórico** o casamento é o `LIKE` do SQLite, que dobra caixa só em ASCII. `acai` não encontra "Açaí", como em Gastos — mas `AÇAÍ` também não, porque `Ç` e `Í` não são dobrados. Em letra acentuada, o Histórico perde também a insensibilidade a maiúsculas; a parte ASCII do termo continua dobrando normalmente.
+
+Resolver exigiria uma coluna normalizada mantida na escrita, e o custo não se paga num app de usuário único que digita o que está vendo na tela. Degradar Gastos para igualar ao Histórico não traria ganho nenhum — só perda. Fica registrado como limitação conhecida, não como defeito, com teste em cada tela fixando o que de fato acontece, para que a divergência não precise ser redescoberta lendo o código.
+
+O termo do usuário é escapado antes de entrar no `LIKE` (`%`, `_` e `\`, com cláusula `ESCAPE`). Sem isso, `%` e `_` valeriam como curinga no Histórico e como caractere literal em Gastos, e a mesma busca daria listas diferentes nas duas telas.
 
 ## Ordenação
 
@@ -141,6 +149,12 @@ O default (`valor`, desc) é exatamente a ordenação fixa de hoje: a tela abre 
 
 `ordem` e `direcao` entram em `spendingQuery()` junto de `mes`, `categorias` e `busca`, e sobrevivem à troca de qualquer um dos outros.
 
+### Comparação de texto: uma regra só, nas duas telas
+
+Toda coluna de texto — `description` e nome do cartão no Histórico, `descricao`, `cartao` e o rótulo de `categoria` em Gastos — compara de forma **insensível a maiúsculas e sem ordenação natural**. Com `("Item 10", "Item 9", "Item 2")`, a ordem crescente é `Item 10 | Item 2 | Item 9` nas duas telas.
+
+A ordenação natural (`Item 2 | Item 9 | Item 10`) é mais agradável de ler, e Gastos chegou a usá-la, via `strnatcasecmp`. Não sobreviveu: o Histórico é paginado no servidor, o SQLite não sabe ordenar naturalmente, e alinhar por cima exigiria trazer o mês inteiro para o PHP para ordenar — exatamente o que a paginação existe para evitar. Duas tabelas do mesmo app respondendo "ordene por nome" de formas diferentes é vivido como instabilidade, e o usuário não tem como saber qual tela usa qual regra. Então Gastos alinha por baixo: `strcasecmp` no `usort`, espelhando o `lower()` do SQL do Histórico.
+
 ## Testes
 
 Feature, em Pest, sobre entrada e saída HTTP — sem espiar o interior das actions.
@@ -149,7 +163,10 @@ Feature, em Pest, sobre entrada e saída HTTP — sem espiar o interior das acti
 - Busca casa `description`, `merchant` e `notes`, um caso por campo.
 - Busca combina com os filtros de mês e cartão em vez de substituí-los.
 - Busca sem resultado devolve lista vazia, não erro.
+- `%` e `_` no termo casam como texto literal, não como curinga do `LIKE`.
+- Letra acentuada não dobra caixa (`AÇAÍ` não encontra "Açaí"), enquanto a parte ASCII do termo dobra — o par do teste de Gastos que prova o contrário lá.
 - Cada coluna ordenável devolve as linhas na ordem esperada, asc e desc.
+- Colunas de texto ordenam sem ordenação natural (`Item 10` antes de `Item 2`).
 - `sort` e `dir` inválidos caem em vencimento ascendente.
 
 **Exportação** (`ExportHistoryTest`)
@@ -165,8 +182,11 @@ Feature, em Pest, sobre entrada e saída HTTP — sem espiar o interior das acti
 
 **Gastos** (`SpendingTest`, `BuildSpendingBreakdownTest`)
 - Busca estreita `entries` sem alterar `categories`, `months` nem os `uncategorized_*` — este é o caso central da decisão 6.
+- Busca **sem nenhum resultado** num mês com gasto continua devolvendo `categories` e `uncategorized_*` populados: é o que autoriza a tela a manter os gráficos e o alerta na dobra do estado vazio.
 - Busca e filtro de categoria convivem.
+- Letra acentuada dobra caixa (`AÇAÍ` encontra "Açaí") e acento continua não dobrando (`acai` não encontra) — o par do teste do Histórico.
 - Cada coluna ordenável devolve `entries` na ordem esperada, asc e desc.
+- Colunas de texto ordenam sem ordenação natural, como o Histórico.
 - `ordem` inválida mantém valor decrescente.
 - Busca e ordenação sobrevivem à troca de mês.
 

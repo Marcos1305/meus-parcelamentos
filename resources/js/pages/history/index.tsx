@@ -1,6 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { ProjectionChart } from '@/components/projection-chart';
 import { PurchaseNotesDialog } from '@/components/purchase-notes-dialog';
@@ -68,31 +68,72 @@ export default function History({
 }: HistoryProps) {
     const [term, setTerm] = useState(filters.q);
 
+    // O termo aparado é o que vai para a URL em qualquer caminho de
+    // navegação: o `trim()` do PHP remove só " \t\n\r\0\x0B" enquanto o do JS
+    // remove também espaço Unicode (NBSP e parentes, corriqueiros ao colar
+    // nome de loja de uma página web). Mandar o valor bruto faria o servidor
+    // devolver um `filters.q` que a guarda do debounce nunca igualaria, e o
+    // efeito dispararia sem fim, uma requisição de página inteira a cada
+    // 300ms.
+    const trimmedTerm = term.trim();
+
+    // `filters` chega com identidade nova a cada resposta do Inertia. Guardar
+    // a versão corrente num ref deixa o efeito da busca depender só do termo
+    // e do `q` do servidor: se dependesse do objeto inteiro, cada resposta
+    // reagendaria o debounce e um desencontro pontual viraria loop.
+    const filtersRef = useRef(filters);
+
+    useEffect(() => {
+        filtersRef.current = filters;
+    });
+
+    const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+        undefined,
+    );
+
     // Debounce de 300ms: sem ele cada tecla vira uma requisição e a lista
     // pisca. `replace` evita empilhar uma entrada de histórico por letra.
-    // O servidor devolve `filters.q` já normalizado por `trim()`, então
-    // comparar contra o valor bruto de `term` nunca empataria quando o
-    // usuário digita um espaço à direita, disparando requisições sem fim.
     useEffect(() => {
-        if (term.trim() === filters.q) {
+        if (trimmedTerm === filters.q) {
             return;
         }
 
         const timer = setTimeout(() => {
             router.get(
                 index().url,
-                { ...filters, q: term },
+                { ...filtersRef.current, q: trimmedTerm },
                 { preserveState: true, replace: true },
             );
         }, 300);
 
+        searchTimer.current = timer;
+
         return () => clearTimeout(timer);
-    }, [term, filters]);
+    }, [trimmedTerm, filters.q]);
+
+    // Um clique num filtro ou num cabeçalho de coluna navega por conta
+    // própria. O timer pendente, se sobrevivesse, dispararia 300ms depois
+    // montado com o estado anterior ao clique e o Inertia cancelaria a visita
+    // recém-iniciada — o que se perde é o clique do usuário. Cancelar no
+    // evento `before` alcança também os `<Link>` de ordenação, que não têm
+    // handler onde encaixar o cancelamento. Prefetch e escrita ficam de fora:
+    // nenhum dos dois substitui a busca que o usuário acabou de digitar.
+    useEffect(
+        () =>
+            router.on('before', (event) => {
+                const { prefetch, method } = event.detail.visit;
+
+                if (!prefetch && method === 'get') {
+                    clearTimeout(searchTimer.current);
+                }
+            }),
+        [],
+    );
 
     function applyFilter(key: keyof HistoryFilters, value: string) {
         router.get(
             index().url,
-            { ...filters, [key]: value },
+            { ...filters, q: trimmedTerm, [key]: value },
             { preserveState: true, replace: true },
         );
     }
@@ -106,7 +147,7 @@ export default function History({
                 : (HISTORY_SORT_DEFAULTS[column] ?? 'asc');
 
         return index({
-            query: { ...filters, sort: column, dir: direction },
+            query: { ...filters, q: trimmedTerm, sort: column, dir: direction },
         }).url;
     }
 
@@ -249,17 +290,27 @@ export default function History({
                 </div>
 
                 {installments.data.length === 0 ? (
-                    <EmptyState
-                        title="Nenhuma parcela encontrada"
-                        description="Ajuste os filtros ou registre um novo lançamento."
-                        action={
-                            <Button asChild>
-                                <Link href={purchases.create()}>
-                                    Novo lançamento
-                                </Link>
-                            </Button>
-                        }
-                    />
+                    filters.q !== '' ? (
+                        // Quem está pesquisando não quer criar um lançamento
+                        // novo: quer o termo certo. Oferecer "Novo lançamento"
+                        // aqui responde a uma pergunta que ninguém fez.
+                        <EmptyState
+                            title="Nenhuma parcela casa com a busca"
+                            description="Ajuste o termo ou limpe a busca para ver a lista completa."
+                        />
+                    ) : (
+                        <EmptyState
+                            title="Nenhuma parcela encontrada"
+                            description="Ajuste os filtros ou registre um novo lançamento."
+                            action={
+                                <Button asChild>
+                                    <Link href={purchases.create()}>
+                                        Novo lançamento
+                                    </Link>
+                                </Button>
+                            }
+                        />
+                    )
                 ) : (
                     <Card>
                         <CardContent className="overflow-x-auto p-0">
@@ -304,7 +355,11 @@ export default function History({
                                         <th className="p-3 text-xs tracking-wide text-muted-foreground uppercase">
                                             Status
                                         </th>
-                                        <th className="p-3 text-xs tracking-wide text-muted-foreground uppercase" />
+                                        <th className="p-3 text-xs tracking-wide text-muted-foreground uppercase">
+                                            <span className="sr-only">
+                                                Ações
+                                            </span>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
@@ -355,23 +410,30 @@ export default function History({
                                                     status={row.status}
                                                 />
                                             </td>
-                                            <td className="flex gap-1 p-3">
-                                                <PurchaseNotesDialog
-                                                    purchaseId={row.purchase.id}
-                                                    description={
-                                                        row.purchase.description
-                                                    }
-                                                    notes={row.purchase.notes}
-                                                />
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        removePurchase(row)
-                                                    }
-                                                >
-                                                    <Trash2 />
-                                                </Button>
+                                            <td className="p-3">
+                                                <div className="flex gap-1">
+                                                    <PurchaseNotesDialog
+                                                        purchaseId={
+                                                            row.purchase.id
+                                                        }
+                                                        description={
+                                                            row.purchase
+                                                                .description
+                                                        }
+                                                        notes={
+                                                            row.purchase.notes
+                                                        }
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            removePurchase(row)
+                                                        }
+                                                    >
+                                                        <Trash2 />
+                                                    </Button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

@@ -28,6 +28,18 @@ export function SortableHeader({
           ? ArrowUp
           : ArrowDown;
 
+    // O nome acessível do link precisa dizer o que o clique faz, não só qual
+    // é a coluna. Vai num `sr-only` em vez de num `aria-label` para que o
+    // texto visível continue fazendo parte do nome — quem navega por voz
+    // pede a coluna pelo rótulo que está vendo. Na coluna ativa dá para
+    // nomear a direção (o clique inverte); nas demais não, porque a direção
+    // inicial de cada coluna mora na tela, não neste componente.
+    const actionHint = isActive
+        ? direction === 'asc'
+            ? 'ordenar em ordem decrescente'
+            : 'ordenar em ordem crescente'
+        : 'ordenar por esta coluna';
+
     return (
         <th
             className="p-0"
@@ -50,6 +62,7 @@ export function SortableHeader({
                 )}
             >
                 {label}
+                <span className="sr-only">, {actionHint}</span>
                 <Icon
                     aria-hidden="true"
                     className={cn('size-3', !isActive && 'opacity-40')}

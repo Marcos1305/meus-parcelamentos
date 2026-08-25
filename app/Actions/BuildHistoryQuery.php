@@ -67,12 +67,18 @@ class BuildHistoryQuery
         }
 
         if ($filters['q'] !== '') {
-            $term = '%'.$filters['q'].'%';
+            // `%` e `_` sao curingas do LIKE. Sem escapar, buscar "100%"
+            // casaria tambem "100 reais", e a mesma busca daria resultados
+            // diferentes aqui e na tela de Gastos, onde o casamento e literal
+            // (str_contains). A clausula `escape` nao e exposta pelo query
+            // builder, dai o SQL cru; `'\'` e um literal de um caractere no
+            // SQLite, que e o banco deste app.
+            $pattern = '%'.addcslashes($filters['q'], '%_\\').'%';
 
             $query->whereHas('purchase', fn (Builder $purchases) => $purchases
-                ->where('description', 'like', $term)
-                ->orWhere('merchant', 'like', $term)
-                ->orWhere('notes', 'like', $term));
+                ->whereRaw("purchases.description like ? escape '\\'", [$pattern])
+                ->orWhereRaw("purchases.merchant like ? escape '\\'", [$pattern])
+                ->orWhereRaw("purchases.notes like ? escape '\\'", [$pattern]));
         }
 
         $today = CarbonImmutable::now();

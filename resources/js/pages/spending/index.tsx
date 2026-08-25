@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CategoryBreakdownChart } from '@/components/category-breakdown-chart';
 import { CategoryFilterChips } from '@/components/category-filter-chips';
 import { CategoryTrendChart } from '@/components/category-trend-chart';
@@ -108,6 +108,14 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
     } = breakdown;
 
     const isFiltered = activeCategories.length > 0;
+    // Sob busca a lista pode estar vazia com o mes cheio: o backend estreita
+    // so `entries` e preserva `categories` e os `uncategorized_*` do mes
+    // inteiro. Quem decide se o grafico de categorias e o alerta de "sem
+    // categoria" aparecem e o mes ter gasto, nao a lista ter linha — senao a
+    // tela se contradiz, escondendo o grafico logo abaixo de um estado vazio
+    // que promete "os graficos continuam mostrando o mes inteiro".
+    const monthHasSpending =
+        breakdown.categories.length > 0 || uncategorizedCount > 0;
     const filteredTotalCents = breakdown.categories.reduce(
         (sum, category) => sum + category.total_cents,
         0,
@@ -125,13 +133,32 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
 
     const [term, setTerm] = useState(search);
 
-    // Debounce de 300ms, mesma razao do Historico: sem ele cada tecla vira
-    // uma requisicao e a lista pisca. O servidor devolve `search` ja passado
-    // por trim(), entao comparar contra o valor bruto de `term` nunca
-    // empataria quando o usuario digita um espaco a direita, disparando
-    // requisicoes sem fim.
+    // O termo aparado e o que vai para a url em qualquer caminho de
+    // navegacao: o `trim()` do PHP remove so " \t\n\r\0\x0B" enquanto o do JS
+    // remove tambem espaco Unicode (NBSP e parentes, corriqueiros ao colar
+    // nome de estabelecimento de uma pagina web). Mandar o valor bruto faria
+    // o servidor devolver um `search` que a guarda do debounce nunca
+    // igualaria, e o efeito dispararia sem fim, uma requisicao a cada 300ms.
+    const trimmedTerm = term.trim();
+
+    // `active_categories` chega como array novo a cada resposta do Inertia.
+    // Guardar a versao corrente num ref deixa o efeito da busca depender so
+    // de valores primitivos: fosse o array, cada resposta reagendaria o
+    // debounce.
+    const activeCategoriesRef = useRef(activeCategories);
+
     useEffect(() => {
-        if (term.trim() === search) {
+        activeCategoriesRef.current = activeCategories;
+    });
+
+    const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+        undefined,
+    );
+
+    // Debounce de 300ms, mesma razao do Historico: sem ele cada tecla vira
+    // uma requisicao e a lista pisca.
+    useEffect(() => {
+        if (trimmedTerm === search) {
             return;
         }
 
@@ -140,8 +167,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                 spending.index({
                     query: spendingQuery(
                         month,
-                        activeCategories,
-                        term,
+                        activeCategoriesRef.current,
+                        trimmedTerm,
                         sort,
                         direction,
                     ),
@@ -151,15 +178,36 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
             );
         }, 300);
 
+        searchTimer.current = timer;
+
         return () => clearTimeout(timer);
-    }, [term, search, month, activeCategories, sort, direction]);
+    }, [trimmedTerm, search, month, sort, direction]);
+
+    // Os filtros, o mes e a ordenacao desta tela navegam por <Link>, sem
+    // handler onde encaixar o cancelamento — por isso o timer pendente e
+    // cancelado no evento `before` do router. Sem isso, o timer dispararia
+    // 300ms depois do clique montado com o estado anterior a ele e o Inertia
+    // cancelaria a visita recem-iniciada: o que se perde e o clique do
+    // usuario. Prefetch (as setas de mes) e escrita ficam de fora: nenhum dos
+    // dois substitui a busca que o usuario acabou de digitar.
+    useEffect(
+        () =>
+            router.on('before', (event) => {
+                const { prefetch, method } = event.detail.visit;
+
+                if (!prefetch && method === 'get') {
+                    clearTimeout(searchTimer.current);
+                }
+            }),
+        [],
+    );
 
     function goToMonth(target: string) {
         return spending.index({
             query: spendingQuery(
                 target,
                 activeCategories,
-                search,
+                trimmedTerm,
                 sort,
                 direction,
             ),
@@ -172,7 +220,7 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
             : [...activeCategories, category];
 
         return spending.index({
-            query: spendingQuery(month, next, search, sort, direction),
+            query: spendingQuery(month, next, trimmedTerm, sort, direction),
         }).url;
     }
 
@@ -185,7 +233,13 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                 : (SPENDING_SORT_DEFAULTS[column] ?? 'asc');
 
         return spending.index({
-            query: spendingQuery(month, activeCategories, search, column, next),
+            query: spendingQuery(
+                month,
+                activeCategories,
+                trimmedTerm,
+                column,
+                next,
+            ),
         }).url;
     }
 
@@ -269,7 +323,7 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     />
                 )}
 
-                {entries.length > 0 && uncategorizedCount > 0 && (
+                {monthHasSpending && uncategorizedCount > 0 && (
                     <Alert>
                         <AlertTitle>
                             {uncategorizedCount === 1
@@ -302,10 +356,10 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                 */}
                 <div
                     className={
-                        entries.length > 0 ? 'grid gap-4 lg:grid-cols-2' : ''
+                        monthHasSpending ? 'grid gap-4 lg:grid-cols-2' : ''
                     }
                 >
-                    {entries.length > 0 && (
+                    {monthHasSpending && (
                         <Card>
                             <CardHeader>
                                 <CardTitle>Gastos por categoria</CardTitle>

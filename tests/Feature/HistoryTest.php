@@ -246,6 +246,53 @@ it('combina a busca com os filtros de mes e cartao', function (): void {
         ->assertInertia(fn ($page) => $page->has('installments.data', 1));
 });
 
+it('trata os curingas do like como texto literal na busca', function (string $termo, string $esperado): void {
+    // Sem escapar, `%` e `_` valeriam como curinga aqui e como caractere
+    // literal em Gastos (str_contains): a mesma busca devolveria listas
+    // diferentes nas duas telas.
+    $user = historyUser();
+
+    foreach (['100% algodao', '100 reais', 'Pizza_grande', 'Pizzaxgrande'] as $descricao) {
+        purchaseInstallment($user, '2026-07-10', 100_00, [
+            'description' => $descricao,
+            'merchant' => null,
+            'notes' => null,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => $termo]))
+        ->assertInertia(fn ($page) => $page
+            ->has('installments.data', 1)
+            ->where('installments.data.0.purchase.description', $esperado));
+})->with([
+    'porcento nao e curinga' => ['100%', '100% algodao'],
+    'underline nao e curinga' => ['Pizza_grande', 'Pizza_grande'],
+]);
+
+it('nao dobra caixa em letra acentuada, mas dobra na parte ascii do termo', function (string $termo, int $esperado): void {
+    // Limitacao conhecida e deliberada: o LIKE do SQLite dobra caixa so em
+    // ASCII, entao no Historico a busca perde tambem a insensibilidade a
+    // maiuscula quando a letra e acentuada. Em Gastos o casamento e em PHP
+    // (mb_strtolower) e o mesmo termo funciona — ver o par deste teste em
+    // BuildSpendingBreakdownTest.
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, [
+        'description' => 'Açaí da esquina',
+        'merchant' => null,
+        'notes' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => $termo]))
+        ->assertInertia(fn ($page) => $page->has('installments.data', $esperado));
+})->with([
+    'termo igual ao texto casa' => ['Açaí', 1],
+    'maiuscula acentuada nao casa' => ['AÇAÍ', 0],
+    'acento continua sem dobrar' => ['acai', 0],
+    'parte ascii do termo dobra normalmente' => ['DA ESQUINA', 1],
+]);
+
 it('devolve lista vazia quando a busca nao casa nada', function (): void {
     $user = historyUser();
     installmentFor($user, '2026-07-10', 100_00);
@@ -297,6 +344,24 @@ it('ordena por descricao ignorando caixa', function (): void {
             ->where('installments.data.0.purchase.description', 'Abacate')
             ->where('installments.data.1.purchase.description', 'banana')
             ->where('installments.data.2.purchase.description', 'Zebra'));
+});
+
+it('ordena descricao sem ordenacao natural', function (): void {
+    // A ordenacao acontece no SQL porque a lista e paginada no servidor, e o
+    // SQLite nao faz ordenacao natural: "Item 10" vem antes de "Item 2". A
+    // tela de Gastos ordena em PHP e casa com esta regra de proposito — ver o
+    // par deste teste em BuildSpendingBreakdownTest.
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, ['description' => 'Item 9']);
+    purchaseInstallment($user, '2026-07-11', 100_00, ['description' => 'Item 10']);
+    purchaseInstallment($user, '2026-07-12', 100_00, ['description' => 'Item 2']);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'description', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page
+            ->where('installments.data.0.purchase.description', 'Item 10')
+            ->where('installments.data.1.purchase.description', 'Item 2')
+            ->where('installments.data.2.purchase.description', 'Item 9'));
 });
 
 it('ordena por valor total da compra', function (): void {

@@ -397,6 +397,85 @@ it('a busca ignora maiusculas e casa parte da descricao', function (string $term
     expect($breakdown['entries'])->toHaveCount(1);
 })->with(['PADARIA', 'padaria', 'daria do']);
 
+it('a busca sem nenhum resultado mantem os graficos e o balde sem categoria do mes inteiro', function (): void {
+    // A tela conta com isso: sob busca ela mantem o grafico de categorias e o
+    // alerta de "sem categoria" na dobra do estado vazio, com a promessa de
+    // que os graficos continuam mostrando o mes inteiro. Se o payload
+    // esvaziasse junto com a lista, a promessa seria falsa.
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'amount_cents' => 30_00,
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Posto Ipiranga',
+        'amount_cents' => 200_00,
+        'category' => null,
+        'billed_at' => '2026-07-12',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: 'zzzzzz',
+    );
+
+    expect($breakdown['entries'])->toBeEmpty()
+        ->and($breakdown['categories'])->toHaveCount(2)
+        ->and(array_sum(array_column($breakdown['categories'], 'total_cents')))->toBe(230_00)
+        ->and($breakdown['uncategorized_count'])->toBe(1)
+        ->and($breakdown['uncategorized_total_cents'])->toBe(200_00);
+});
+
+it('a busca de gastos dobra caixa tambem em letra acentuada', function (string $termo, int $esperado): void {
+    // Contraparte do teste do Historico: aqui o casamento e em PHP
+    // (mb_strtolower + str_contains), entao "AÇAÍ" encontra "Açaí" — o que o
+    // LIKE do SQLite nao faz. O acento continua sem dobrar nas duas telas.
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Açaí da esquina',
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: $termo,
+    );
+
+    expect($breakdown['entries'])->toHaveCount($esperado);
+})->with([
+    'maiuscula acentuada casa' => ['AÇAÍ', 1],
+    'acento continua sem dobrar' => ['acai', 0],
+]);
+
+it('ordena texto sem ordenacao natural, como o historico', function (): void {
+    // O Historico e paginado no servidor e o SQLite nao faz ordenacao
+    // natural; Gastos ordena em PHP e poderia fazer, mas alinha por baixo
+    // para que "ordene por nome" signifique a mesma coisa nas duas telas.
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    foreach (['Item 9', 'Item 10', 'Item 2'] as $descricao) {
+        CashPurchase::factory()->for($card)->create([
+            'description' => $descricao,
+            'billed_at' => '2026-07-10',
+        ]);
+    }
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: 'descricao',
+        direction: 'asc',
+    );
+
+    expect(array_column($breakdown['entries'], 'description'))
+        ->toBe(['Item 10', 'Item 2', 'Item 9']);
+});
+
 function gastosDeJulho(User $user): void
 {
     $card = Card::factory()->for($user)->create(['name' => 'Zeta']);

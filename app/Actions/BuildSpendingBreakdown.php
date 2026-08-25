@@ -255,6 +255,14 @@ class BuildSpendingBreakdown
     }
 
     /**
+     * As colunas de texto comparam com strcasecmp: insensivel a maiusculas,
+     * mas sem ordenacao natural. E o mesmo criterio do Historico, que ordena
+     * com `lower()` no SQL — la a paginacao no servidor obriga a ordenacao a
+     * acontecer no banco, e o SQLite nao faz ordenacao natural. A alternativa
+     * seria manter as duas telas divergindo na mesma pergunta ("ordene por
+     * nome"): "Item 10" antes de "Item 2" numa, depois na outra, sem o
+     * usuario ter como saber qual tela usa qual regra.
+     *
      * @param  Collection<int, CashPurchase>  $cash
      * @param  Collection<int, Installment>  $installments
      * @param  string  $search  termo ja normalizado pelo controller; vazio significa "sem busca"
@@ -322,8 +330,8 @@ class BuildSpendingBreakdown
             }
 
             return $signal * match ($sort) {
-                'descricao' => strnatcasecmp($a['description'], $b['description']),
-                'cartao' => strnatcasecmp($a['card_name'], $b['card_name']),
+                'descricao' => strcasecmp($a['description'], $b['description']),
+                'cartao' => strcasecmp($a['card_name'], $b['card_name']),
                 'data' => strcmp($a['purchased_at'], $b['purchased_at']),
                 default => $a['amount_cents'] <=> $b['amount_cents'],
             };
@@ -339,6 +347,9 @@ class BuildSpendingBreakdown
      * desc — em vez de trocar de lado junto com as categorias reais quando o
      * usuario inverte a ordenacao. O sinal so entra na comparacao entre dois
      * rotulos de categoria de verdade.
+     *
+     * Os rotulos comparam com strcasecmp pela mesma razao das demais colunas
+     * de texto de entries(): uma unica regra de comparacao de texto no app.
      */
     private function compareCategories(?string $a, ?string $b, int $signal): int
     {
@@ -346,7 +357,7 @@ class BuildSpendingBreakdown
             return ($a === null ? 1 : 0) <=> ($b === null ? 1 : 0);
         }
 
-        return $signal * strnatcasecmp(
+        return $signal * strcasecmp(
             ExpenseCategory::from($a)->label(),
             ExpenseCategory::from($b)->label(),
         );
