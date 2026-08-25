@@ -328,3 +328,233 @@ it('aponta a entrada da parcela para a compra, nao para a parcela', function ():
         ->and($entry['category'])->toBe('casa')
         ->and($entry['card_name'])->toBe($card->name);
 });
+
+it('a busca estreita as entries sem mexer nos graficos', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'amount_cents' => 30_00,
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Posto Ipiranga',
+        'amount_cents' => 200_00,
+        'category' => ExpenseCategory::Transporte,
+        'billed_at' => '2026-07-12',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: 'padaria',
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['description'])->toBe('Padaria do Zé')
+        ->and($breakdown['categories'])->toHaveCount(2)
+        ->and(array_sum(array_column($breakdown['categories'], 'total_cents')))->toBe(230_00)
+        ->and($breakdown['search'])->toBe('padaria');
+});
+
+it('a busca convive com o filtro de categoria', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria da esquina',
+        'category' => ExpenseCategory::Transporte,
+        'billed_at' => '2026-07-11',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: ['mercado'],
+        search: 'padaria',
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['description'])->toBe('Padaria do Zé');
+});
+
+it('a busca ignora maiusculas e casa parte da descricao', function (string $termo): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: $termo,
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1);
+})->with(['PADARIA', 'padaria', 'daria do']);
+
+it('a busca sem nenhum resultado mantem os graficos e o balde sem categoria do mes inteiro', function (): void {
+    // A tela conta com isso: sob busca ela mantem o grafico de categorias e o
+    // alerta de "sem categoria" na dobra do estado vazio, com a promessa de
+    // que os graficos continuam mostrando o mes inteiro. Se o payload
+    // esvaziasse junto com a lista, a promessa seria falsa.
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'amount_cents' => 30_00,
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Posto Ipiranga',
+        'amount_cents' => 200_00,
+        'category' => null,
+        'billed_at' => '2026-07-12',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: 'zzzzzz',
+    );
+
+    expect($breakdown['entries'])->toBeEmpty()
+        ->and($breakdown['categories'])->toHaveCount(2)
+        ->and(array_sum(array_column($breakdown['categories'], 'total_cents')))->toBe(230_00)
+        ->and($breakdown['uncategorized_count'])->toBe(1)
+        ->and($breakdown['uncategorized_total_cents'])->toBe(200_00);
+});
+
+it('a busca de gastos dobra caixa tambem em letra acentuada', function (string $termo, int $esperado): void {
+    // Contraparte do teste do Historico: aqui o casamento e em PHP
+    // (mb_strtolower + str_contains), entao "AÇAÍ" encontra "Açaí" — o que o
+    // LIKE do SQLite nao faz. O acento continua sem dobrar nas duas telas.
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Açaí da esquina',
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: $termo,
+    );
+
+    expect($breakdown['entries'])->toHaveCount($esperado);
+})->with([
+    'maiuscula acentuada casa' => ['AÇAÍ', 1],
+    'acento continua sem dobrar' => ['acai', 0],
+]);
+
+it('ordena texto sem ordenacao natural, como o historico', function (): void {
+    // O Historico e paginado no servidor e o SQLite nao faz ordenacao
+    // natural; Gastos ordena em PHP e poderia fazer, mas alinha por baixo
+    // para que "ordene por nome" signifique a mesma coisa nas duas telas.
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    foreach (['Item 9', 'Item 10', 'Item 2'] as $descricao) {
+        CashPurchase::factory()->for($card)->create([
+            'description' => $descricao,
+            'billed_at' => '2026-07-10',
+        ]);
+    }
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: 'descricao',
+        direction: 'asc',
+    );
+
+    expect(array_column($breakdown['entries'], 'description'))
+        ->toBe(['Item 10', 'Item 2', 'Item 9']);
+});
+
+function gastosDeJulho(User $user): void
+{
+    $card = Card::factory()->for($user)->create(['name' => 'Zeta']);
+    $outro = Card::factory()->for($user)->create(['name' => 'Alfa']);
+
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Zebra',
+        'amount_cents' => 10_00,
+        'purchased_at' => '2026-07-20',
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Transporte,
+    ]);
+
+    CashPurchase::factory()->for($outro)->create([
+        'description' => 'Abacate',
+        'amount_cents' => 500_00,
+        'purchased_at' => '2026-07-02',
+        'billed_at' => '2026-07-10',
+        'category' => ExpenseCategory::Mercado,
+    ]);
+}
+
+it('ordena as entries de gastos pela coluna pedida', function (string $ordem, string $direcao, string $primeiro): void {
+    $user = User::factory()->create();
+    gastosDeJulho($user);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: $ordem,
+        direction: $direcao,
+    );
+
+    expect($breakdown['entries'][0]['description'])->toBe($primeiro);
+})->with([
+    ['descricao', 'asc', 'Abacate'],
+    ['descricao', 'desc', 'Zebra'],
+    ['cartao', 'asc', 'Abacate'],
+    ['cartao', 'desc', 'Zebra'],
+    ['data', 'desc', 'Zebra'],
+    ['data', 'asc', 'Abacate'],
+    ['valor', 'desc', 'Abacate'],
+    ['valor', 'asc', 'Zebra'],
+]);
+
+it('joga o gasto sem categoria para o fim ao ordenar por categoria, nas duas direcoes', function (string $direcao, string $primeiro, string $segundo): void {
+    $user = User::factory()->create();
+    $card = Card::factory()->for($user)->create();
+
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Sem rótulo',
+        'category' => null,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Zebra Casa',
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Alfa Mercado',
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        sort: 'categoria',
+        direction: $direcao,
+    );
+
+    // O sinal de direcao troca a ordem entre as duas categorias reais (Casa
+    // e Mercado), mas nunca tira o gasto sem categoria do fim: e o caso que
+    // o achado da revisao pegou, porque so 'asc' era coberto antes.
+    expect($breakdown['entries'][0]['description'])->toBe($primeiro)
+        ->and($breakdown['entries'][1]['description'])->toBe($segundo)
+        ->and($breakdown['entries'][2]['description'])->toBe('Sem rótulo');
+})->with([
+    'asc: Casa antes de Mercado, sem categoria no fim' => ['asc', 'Zebra Casa', 'Alfa Mercado'],
+    'desc: Mercado antes de Casa, sem categoria continua no fim' => ['desc', 'Alfa Mercado', 'Zebra Casa'],
+]);

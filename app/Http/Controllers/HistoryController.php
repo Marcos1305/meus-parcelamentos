@@ -27,8 +27,6 @@ class HistoryController extends Controller
         $filters = $buildHistoryQuery->filters($request);
 
         $installments = $buildHistoryQuery->handle($user, $filters)
-            ->orderBy('due_date')
-            ->orderBy('id')
             ->paginate(20)
             ->withQueryString()
             ->through(fn (Installment $installment): array => [
@@ -41,6 +39,7 @@ class HistoryController extends Controller
                     'id' => $installment->purchase->id,
                     'description' => $installment->purchase->description,
                     'merchant' => $installment->purchase->merchant,
+                    'notes' => $installment->purchase->notes,
                     'total_amount_cents' => $installment->purchase->total_amount_cents,
                     'installments_count' => $installment->purchase->installments_count,
                 ],

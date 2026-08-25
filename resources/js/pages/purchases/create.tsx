@@ -14,6 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { formatBRL, formatDate, parseBRLToCents } from '@/lib/currency';
 import { buildSchedulePreview } from '@/lib/installments';
 import { dashboard } from '@/routes';
@@ -112,6 +113,20 @@ export default function CreatePurchase({ cards }: { cards: CardOption[] }) {
                                         placeholder="Apple Store - Shopping Morumbi"
                                     />
                                     <InputError message={errors.merchant} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="notes">
+                                        Observação (opcional)
+                                    </Label>
+                                    <Textarea
+                                        id="notes"
+                                        name="notes"
+                                        rows={3}
+                                        maxLength={1000}
+                                        placeholder="Dividido com o João, ele paga metade em janeiro."
+                                    />
+                                    <InputError message={errors.notes} />
                                 </div>
 
                                 <div className="grid gap-4 sm:grid-cols-3">

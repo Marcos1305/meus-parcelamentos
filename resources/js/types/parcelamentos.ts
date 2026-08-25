@@ -117,6 +117,14 @@ export type SpendingBreakdown = {
      * zerado no mes, para o usuario conseguir desmarca-la.
      */
     available_categories: SpendingCategoryTotal[];
+    /**
+     * Termo de busca ja normalizado pelo servidor. Filtra apenas `entries`;
+     * `categories`, `months` e os `uncategorized_*` seguem enxergando o mes
+     * inteiro.
+     */
+    search: string;
+    sort: string;
+    direction: 'asc' | 'desc';
 };
 
 export type DashboardSummary = {
@@ -147,6 +155,7 @@ export type HistoryRow = {
         id: number;
         description: string;
         merchant: string | null;
+        notes: string | null;
         total_amount_cents: number;
         installments_count: number;
     };
@@ -168,6 +177,9 @@ export type HistoryFilters = {
     month: string;
     status: string;
     card: string;
+    q: string;
+    sort: string;
+    dir: 'asc' | 'desc';
 };
 
 export type FinanceTip = {

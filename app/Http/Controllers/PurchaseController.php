@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\GenerateInstallments;
 use App\Http\Requests\StorePurchaseRequest;
+use App\Http\Requests\UpdatePurchaseNotesRequest;
 use App\Models\Card;
 use App\Models\Purchase;
 use Illuminate\Http\RedirectResponse;
@@ -49,6 +50,18 @@ class PurchaseController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lançamento registrado.']);
 
         return to_route('dashboard');
+    }
+
+    /**
+     * A observacao mora na compra, nao na parcela: anotar "presente da Ana"
+     * vale para as doze parcelas, nao para a de marco. Mesma regra ja adotada
+     * para categoria.
+     */
+    public function updateNotes(UpdatePurchaseNotesRequest $request, Purchase $purchase): RedirectResponse
+    {
+        $purchase->update($request->validated());
+
+        return back();
     }
 
     public function destroy(Purchase $purchase): RedirectResponse

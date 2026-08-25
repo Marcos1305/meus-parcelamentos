@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $card_id
  * @property string $description
  * @property string|null $merchant
+ * @property string|null $notes
  * @property int $total_amount_cents
  * @property int $installments_count
  * @property CarbonImmutable $purchased_at
@@ -29,7 +30,7 @@ use Illuminate\Support\Carbon;
  * @property-read Card $card
  * @property-read Collection<int, Installment> $installments
  */
-#[Fillable(['card_id', 'description', 'merchant', 'total_amount_cents', 'installments_count', 'purchased_at', 'category', 'category_is_manual'])]
+#[Fillable(['card_id', 'description', 'merchant', 'notes', 'total_amount_cents', 'installments_count', 'purchased_at', 'category', 'category_is_manual'])]
 class Purchase extends Model
 {
     /** @use HasFactory<PurchaseFactory> */
@@ -41,6 +42,13 @@ class Purchase extends Model
      * nunca divirjam sobre o que e uma compra valida.
      */
     public const int MAX_DESCRIPTION_LENGTH = 120;
+
+    /**
+     * A observacao e texto corrido escrito pelo usuario, nao rotulo: cabe
+     * mais que os 120 caracteres da descricao, mas segue limitada para que a
+     * coluna nao vire deposito de documento.
+     */
+    public const int MAX_NOTES_LENGTH = 1000;
 
     public const int MAX_INSTALLMENTS_COUNT = 48;
 
