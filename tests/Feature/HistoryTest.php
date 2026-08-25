@@ -96,6 +96,17 @@ it('pagina em vinte e preserva os filtros', function (): void {
             ->where('installments.total', 25));
 });
 
+it('entrega a observacao da compra na linha do historico', function (): void {
+    $user = historyUser();
+    $installment = installmentFor($user, '2026-07-10', 100_00);
+    $installment->purchase->update(['notes' => 'Garantia até 2028.']);
+
+    $this->actingAs($user)
+        ->get(route('history.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('installments.data.0.purchase.notes', 'Garantia até 2028.'));
+});
+
 it('ordena por vencimento ascendente', function (): void {
     $user = historyUser();
     installmentFor($user, '2026-07-28', 100_00);

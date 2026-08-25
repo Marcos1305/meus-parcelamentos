@@ -28,7 +28,7 @@ class ExportHistoryController extends Controller
             fwrite($handle, "\xEF\xBB\xBF");
 
             fputcsv($handle, [
-                'cartao', 'descricao', 'estabelecimento', 'valor_total_compra',
+                'cartao', 'descricao', 'estabelecimento', 'observacao', 'valor_total_compra',
                 'parcela', 'total_parcelas', 'valor_parcela', 'vencimento', 'status',
             ], ';', '"', '');
 
@@ -54,6 +54,7 @@ class ExportHistoryController extends Controller
             "{$card->name} •••• {$card->last_four_digits}",
             $purchase->description,
             $purchase->merchant ?? '',
+            $purchase->notes ?? '',
             $this->money($purchase->total_amount_cents),
             (string) $installment->number,
             (string) $purchase->installments_count,

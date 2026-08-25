@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/empty-state';
 import { ProjectionChart } from '@/components/projection-chart';
+import { PurchaseNotesDialog } from '@/components/purchase-notes-dialog';
 import { StatusChip } from '@/components/status-chip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -222,6 +223,11 @@ export default function History({
                                                         {row.purchase.merchant}
                                                     </p>
                                                 )}
+                                                {row.purchase.notes && (
+                                                    <p className="line-clamp-2 max-w-xs text-xs text-muted-foreground italic">
+                                                        {row.purchase.notes}
+                                                    </p>
+                                                )}
                                             </td>
                                             <td className="p-3 tabular-nums">
                                                 {formatBRL(
@@ -253,7 +259,14 @@ export default function History({
                                                     status={row.status}
                                                 />
                                             </td>
-                                            <td className="p-3">
+                                            <td className="flex gap-1 p-3">
+                                                <PurchaseNotesDialog
+                                                    purchaseId={row.purchase.id}
+                                                    description={
+                                                        row.purchase.description
+                                                    }
+                                                    notes={row.purchase.notes}
+                                                />
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"

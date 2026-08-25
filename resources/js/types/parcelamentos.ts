@@ -147,6 +147,7 @@ export type HistoryRow = {
         id: number;
         description: string;
         merchant: string | null;
+        notes: string | null;
         total_amount_cents: number;
         installments_count: number;
     };

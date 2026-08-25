@@ -186,3 +186,55 @@ it('recusa observacao acima do limite', function (): void {
 
     expect(Purchase::count())->toBe(0);
 });
+
+it('atualiza a observacao de uma compra existente', function (): void {
+    $user = User::factory()->create();
+    $purchase = Purchase::factory()->for(Card::factory()->for($user))->create(['notes' => null]);
+
+    $this->actingAs($user)
+        ->patch(route('purchases.notes', $purchase), ['notes' => 'Garantia até 2028.'])
+        ->assertRedirect();
+
+    expect($purchase->refresh()->notes)->toBe('Garantia até 2028.');
+});
+
+it('limpa a observacao quando o texto vem so com espacos', function (): void {
+    $user = User::factory()->create();
+    $purchase = Purchase::factory()->for(Card::factory()->for($user))->create(['notes' => 'Nota antiga']);
+
+    $this->actingAs($user)
+        ->patch(route('purchases.notes', $purchase), ['notes' => '   ']);
+
+    expect($purchase->refresh()->notes)->toBeNull();
+});
+
+it('recusa observacao acima do limite na edicao', function (): void {
+    $user = User::factory()->create();
+    $purchase = Purchase::factory()->for(Card::factory()->for($user))->create(['notes' => 'Nota antiga']);
+
+    $this->actingAs($user)
+        ->patch(route('purchases.notes', $purchase), ['notes' => str_repeat('a', Purchase::MAX_NOTES_LENGTH + 1)])
+        ->assertSessionHasErrors('notes');
+
+    expect($purchase->refresh()->notes)->toBe('Nota antiga');
+});
+
+it('exige o campo notes na edicao', function (): void {
+    $user = User::factory()->create();
+    $purchase = Purchase::factory()->for(Card::factory()->for($user))->create();
+
+    $this->actingAs($user)
+        ->patch(route('purchases.notes', $purchase), [])
+        ->assertSessionHasErrors('notes');
+});
+
+it('nao deixa editar a observacao de compra de outro usuario', function (): void {
+    $user = User::factory()->create();
+    $foreign = Purchase::factory()->create(['notes' => 'Nota alheia']);
+
+    $this->actingAs($user)
+        ->patch(route('purchases.notes', $foreign), ['notes' => 'Invasão'])
+        ->assertForbidden();
+
+    expect($foreign->refresh()->notes)->toBe('Nota alheia');
+});

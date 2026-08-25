@@ -41,7 +41,7 @@ it('comeca com BOM e usa ponto e virgula', function (): void {
     $csv = csvFrom($response);
 
     expect($csv)->toStartWith("\xEF\xBB\xBF")
-        ->and($csv)->toContain('cartao;descricao;estabelecimento;valor_total_compra;parcela;total_parcelas;valor_parcela;vencimento;status');
+        ->and($csv)->toContain('cartao;descricao;estabelecimento;observacao;valor_total_compra;parcela;total_parcelas;valor_parcela;vencimento;status');
 });
 
 it('exporta uma linha por parcela do filtro ativo', function (): void {
@@ -71,7 +71,7 @@ it('escreve os campos com os valores corretos', function (): void {
 
     $csv = csvFrom($this->actingAs($user)->get(route('history.export')));
 
-    expect($csv)->toContain('"Nubank •••• 8291";"MacBook Pro M2";"Apple Store";1200,00;1;12;100,00;10/07/2026;Pago');
+    expect($csv)->toContain('"Nubank •••• 8291";"MacBook Pro M2";"Apple Store";;1200,00;1;12;100,00;10/07/2026;Pago');
 });
 
 it('nao exporta parcelas de outro usuario', function (): void {
@@ -85,4 +85,16 @@ it('nao exporta parcelas de outro usuario', function (): void {
 
 it('exige autenticacao para exportar', function (): void {
     $this->get(route('history.export'))->assertRedirect(route('login'));
+});
+
+it('exporta a observacao numa coluna propria', function (): void {
+    $user = User::factory()->create();
+    $comNota = exportInstallment($user, '2026-07-10', 100_00);
+    $comNota->purchase->update(['notes' => 'Garantia até 2028.']);
+    exportInstallment($user, '2026-07-11', 100_00);
+
+    $csv = csvFrom($this->actingAs($user)->get(route('history.export')));
+
+    expect($csv)->toContain('observacao')
+        ->and($csv)->toContain('Garantia até 2028.');
 });
