@@ -100,7 +100,7 @@ O banco é SQLite. `LIKE` ignora maiúsculas para ASCII, mas não dobra acentos:
 | `label` | `string` | Texto do cabeçalho |
 | `active` | `string` | Coluna ordenada no momento |
 | `direction` | `'asc' \| 'desc'` | Direção atual |
-| `href` | `(column: string, direction: 'asc' \| 'desc') => string` | Monta o link do próximo estado |
+| `href` | `(column: string) => string` | Monta o link do próximo estado; a tela é quem sabe a direção inicial de cada coluna |
 | `align` | `'left' \| 'right'` (opcional) | Acompanha as colunas numéricas |
 
 Renderiza um `Link` do Inertia dentro do `<th>`, com seta indicando a direção quando a coluna está ativa, `aria-sort` correspondente (`ascending` / `descending` / `none`) e rótulo acessível descrevendo o que o clique fará. Clicar na coluna ativa inverte a direção; clicar em outra coluna começa pelo default dela.
