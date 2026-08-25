@@ -3,7 +3,9 @@
 namespace App\Actions;
 
 use App\Enums\InstallmentStatus;
+use App\Models\Card;
 use App\Models\Installment;
+use App\Models\Purchase;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,22 +14,34 @@ use Illuminate\Http\Request;
 class BuildHistoryQuery
 {
     /**
-     * @return array{month: string, status: string, card: string, q: string}
+     * Colunas que a tela oferece para ordenar. `status` fica de fora de
+     * proposito: ele e derivado de `due_date` comparada com hoje, entao
+     * "ordenar por status" seria ordenar por vencimento com outro nome, e a
+     * tela ofereceria dois controles que fazem a mesma coisa.
+     */
+    private const array SORTABLE_COLUMNS = ['description', 'total', 'card', 'number', 'due_date'];
+
+    /**
+     * @return array{month: string, status: string, card: string, q: string, sort: string, dir: 'asc'|'desc'}
      */
     public function filters(Request $request): array
     {
         $term = $request->query('q', '');
+        $sort = $request->query('sort');
+        $direction = $request->query('dir');
 
         return [
             'month' => (string) $request->query('month', CarbonImmutable::now()->format('Y-m')),
             'status' => (string) $request->query('status', 'all'),
             'card' => (string) $request->query('card', 'all'),
             'q' => is_string($term) ? trim($term) : '',
+            'sort' => is_string($sort) && in_array($sort, self::SORTABLE_COLUMNS, true) ? $sort : 'due_date',
+            'dir' => is_string($direction) && in_array($direction, ['asc', 'desc'], true) ? $direction : 'asc',
         ];
     }
 
     /**
-     * @param  array{month: string, status: string, card: string, q: string}  $filters
+     * @param  array{month: string, status: string, card: string, q: string, sort: string, dir: 'asc'|'desc'}  $filters
      * @return Builder<Installment>
      */
     public function handle(User $user, array $filters): Builder
@@ -72,6 +86,48 @@ class BuildHistoryQuery
             null => null,
         };
 
+        $this->applySort($query, $filters);
+
         return $query;
+    }
+
+    /**
+     * As colunas de `purchases` e `cards` sao ordenadas por subconsulta
+     * correlacionada, e nao por join: o `whereHas` do filtro de cartao e o
+     * `with` do carregamento contam com uma query sem joins que dupliquem
+     * linhas.
+     *
+     * O desempate por `id` fecha toda ordenacao. Sem ele, duas parcelas com o
+     * mesmo vencimento podem trocar de posicao entre requisicoes e sumir da
+     * paginacao — a linha aparece na pagina 1 numa carga e na pagina 2 na
+     * seguinte, sem nunca ser vista.
+     *
+     * @param  Builder<Installment>  $query
+     * @param  array{month: string, status: string, card: string, q: string, sort: string, dir: 'asc'|'desc'}  $filters
+     */
+    private function applySort(Builder $query, array $filters): void
+    {
+        $direction = $filters['dir'];
+
+        match ($filters['sort']) {
+            'description' => $query->orderBy(
+                Purchase::select('description')->whereColumn('purchases.id', 'installments.purchase_id'),
+                $direction,
+            ),
+            'total' => $query->orderBy(
+                Purchase::select('total_amount_cents')->whereColumn('purchases.id', 'installments.purchase_id'),
+                $direction,
+            ),
+            'card' => $query->orderBy(
+                Card::select('cards.name')
+                    ->join('purchases', 'purchases.card_id', '=', 'cards.id')
+                    ->whereColumn('purchases.id', 'installments.purchase_id'),
+                $direction,
+            ),
+            'number' => $query->orderBy('number', $direction),
+            default => $query->orderBy('due_date', $direction),
+        };
+
+        $query->orderBy('id');
     }
 }

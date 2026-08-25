@@ -13,9 +13,7 @@ class ExportHistoryController extends Controller
     public function __invoke(Request $request, BuildHistoryQuery $buildHistoryQuery): StreamedResponse
     {
         $query = $buildHistoryQuery
-            ->handle($request->user(), $buildHistoryQuery->filters($request))
-            ->orderBy('due_date')
-            ->orderBy('id');
+            ->handle($request->user(), $buildHistoryQuery->filters($request));
 
         return response()->streamDownload(function () use ($query): void {
             $handle = fopen('php://output', 'wb');

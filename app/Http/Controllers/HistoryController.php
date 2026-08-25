@@ -27,8 +27,6 @@ class HistoryController extends Controller
         $filters = $buildHistoryQuery->filters($request);
 
         $installments = $buildHistoryQuery->handle($user, $filters)
-            ->orderBy('due_date')
-            ->orderBy('id')
             ->paginate(20)
             ->withQueryString()
             ->through(fn (Installment $installment): array => [

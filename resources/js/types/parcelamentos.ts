@@ -170,6 +170,8 @@ export type HistoryFilters = {
     status: string;
     card: string;
     q: string;
+    sort: string;
+    dir: 'asc' | 'desc';
 };
 
 export type FinanceTip = {

@@ -205,6 +205,100 @@ it('devolve lista vazia quando a busca nao casa nada', function (): void {
         ->assertInertia(fn ($page) => $page->has('installments.data', 0));
 });
 
+function purchaseInstallment(User $user, string $dueDate, int $amountCents, array $purchaseAttributes, ?Card $card = null): Installment
+{
+    $purchase = Purchase::factory()
+        ->for($card ?? Card::factory()->for($user))
+        ->create($purchaseAttributes);
+
+    return Installment::factory()->for($purchase)->create([
+        'number' => 1,
+        'due_date' => $dueDate,
+        'amount_cents' => $amountCents,
+    ]);
+}
+
+it('ordena por descricao', function (): void {
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, ['description' => 'Zebra']);
+    purchaseInstallment($user, '2026-07-11', 100_00, ['description' => 'Abacate']);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'description', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.purchase.description', 'Abacate'));
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'description', 'dir' => 'desc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.purchase.description', 'Zebra'));
+});
+
+it('ordena por valor total da compra', function (): void {
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, ['total_amount_cents' => 50_00]);
+    purchaseInstallment($user, '2026-07-11', 100_00, ['total_amount_cents' => 900_00]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'total', 'dir' => 'desc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.purchase.total_amount_cents', 900_00));
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'total', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.purchase.total_amount_cents', 50_00));
+});
+
+it('ordena por nome do cartao', function (): void {
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, [], Card::factory()->for($user)->create(['name' => 'Zeta']));
+    purchaseInstallment($user, '2026-07-11', 100_00, [], Card::factory()->for($user)->create(['name' => 'Alfa']));
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'card', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.card.name', 'Alfa'));
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'card', 'dir' => 'desc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.card.name', 'Zeta'));
+});
+
+it('ordena pelo numero da parcela', function (): void {
+    $user = historyUser();
+    $purchase = Purchase::factory()->for(Card::factory()->for($user))->create(['installments_count' => 3]);
+    Installment::factory()->for($purchase)->create(['number' => 3, 'due_date' => '2026-07-05', 'amount_cents' => 100_00]);
+    Installment::factory()->for($purchase)->create(['number' => 1, 'due_date' => '2026-07-20', 'amount_cents' => 100_00]);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'number', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.number', 1));
+});
+
+it('ordena por vencimento descendente quando pedido', function (): void {
+    $user = historyUser();
+    installmentFor($user, '2026-07-02', 100_00);
+    installmentFor($user, '2026-07-28', 100_00);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'due_date', 'dir' => 'desc']))
+        ->assertInertia(fn ($page) => $page->where('installments.data.0.due_date', '2026-07-28'));
+});
+
+it('cai em vencimento ascendente quando sort ou dir sao invalidos', function (array $query): void {
+    $user = historyUser();
+    installmentFor($user, '2026-07-28', 100_00);
+    installmentFor($user, '2026-07-02', 100_00);
+
+    $this->actingAs($user)
+        ->get(route('history.index', $query))
+        ->assertInertia(fn ($page) => $page
+            ->where('installments.data.0.due_date', '2026-07-02')
+            ->where('filters.sort', 'due_date')
+            ->where('filters.dir', 'asc'));
+})->with([
+    [['sort' => 'status']],
+    [['sort' => 'nao-existe']],
+    [['dir' => 'sideways']],
+    [['sort' => 'due_date', 'dir' => '']],
+]);
+
 it('degrada entrada hostil de q na url para busca vazia', function (mixed $q): void {
     // Parametro de URL invalido cai no default em silencio; cada forma
     // hostil de entrada precisa de uma prova, nao so leitura de codigo.

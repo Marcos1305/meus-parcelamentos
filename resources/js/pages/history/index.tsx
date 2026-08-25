@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { ProjectionChart } from '@/components/projection-chart';
 import { PurchaseNotesDialog } from '@/components/purchase-notes-dialog';
+import { SortableHeader } from '@/components/sortable-header';
+import type { SortDirection } from '@/components/sortable-header';
 import { StatusChip } from '@/components/status-chip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +30,19 @@ import type {
     MonthlyProjectionRow,
     Paginated,
 } from '@/types';
+
+/**
+ * Direção com que cada coluna abre no primeiro clique. Valor e vencimento
+ * abrem decrescentes porque "o mais caro" e "o mais recente" são o que se
+ * procura primeiro; texto abre crescente porque A→Z é o que se espera.
+ */
+const HISTORY_SORT_DEFAULTS: Record<string, SortDirection> = {
+    description: 'asc',
+    total: 'desc',
+    card: 'asc',
+    number: 'asc',
+    due_date: 'asc',
+};
 
 type HistoryProps = {
     installments: Paginated<HistoryRow>;
@@ -77,6 +92,19 @@ export default function History({
             { ...filters, [key]: value },
             { preserveState: true, replace: true },
         );
+    }
+
+    function sortHref(column: string) {
+        const direction: SortDirection =
+            filters.sort === column
+                ? filters.dir === 'asc'
+                    ? 'desc'
+                    : 'asc'
+                : (HISTORY_SORT_DEFAULTS[column] ?? 'asc');
+
+        return index({
+            query: { ...filters, sort: column, dir: direction },
+        }).url;
     }
 
     function removePurchase(row: HistoryRow) {
@@ -233,15 +261,47 @@ export default function History({
                     <Card>
                         <CardContent className="overflow-x-auto p-0">
                             <table className="w-full text-sm">
-                                <thead className="border-b text-left text-xs tracking-wide text-muted-foreground uppercase">
+                                <thead className="border-b text-left">
                                     <tr>
-                                        <th className="p-3">Item</th>
-                                        <th className="p-3">Valor total</th>
-                                        <th className="p-3">Cartão</th>
-                                        <th className="p-3">Parcela</th>
-                                        <th className="p-3">Vencimento</th>
-                                        <th className="p-3">Status</th>
-                                        <th className="p-3" />
+                                        <SortableHeader
+                                            column="description"
+                                            label="Item"
+                                            active={filters.sort}
+                                            direction={filters.dir}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="total"
+                                            label="Valor total"
+                                            active={filters.sort}
+                                            direction={filters.dir}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="card"
+                                            label="Cartão"
+                                            active={filters.sort}
+                                            direction={filters.dir}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="number"
+                                            label="Parcela"
+                                            active={filters.sort}
+                                            direction={filters.dir}
+                                            href={sortHref}
+                                        />
+                                        <SortableHeader
+                                            column="due_date"
+                                            label="Vencimento"
+                                            active={filters.sort}
+                                            direction={filters.dir}
+                                            href={sortHref}
+                                        />
+                                        <th className="p-3 text-xs tracking-wide text-muted-foreground uppercase">
+                                            Status
+                                        </th>
+                                        <th className="p-3 text-xs tracking-wide text-muted-foreground uppercase" />
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
