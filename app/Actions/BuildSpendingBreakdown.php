@@ -258,7 +258,8 @@ class BuildSpendingBreakdown
      * @param  Collection<int, CashPurchase>  $cash
      * @param  Collection<int, Installment>  $installments
      * @param  string  $search  termo ja normalizado pelo controller; vazio significa "sem busca"
-     * @param  string  $sort  coluna de ordenacao (self::SORTABLE_COLUMNS)
+     * @param  string  $sort  coluna de ordenacao (self::SORTABLE_COLUMNS); em 'categoria', o gasto sem
+     *                        categoria vai sempre para o fim da lista, em asc e em desc — ver compareCategories()
      * @param  string  $direction  'asc' ou 'desc'
      * @return array<int, array{id: int, kind: string, description: string, amount_cents: int, purchased_at: string, installment_label: string|null, category: string|null, category_is_manual: bool, card_name: string}>
      */
@@ -315,28 +316,40 @@ class BuildSpendingBreakdown
 
         $signal = $direction === 'asc' ? 1 : -1;
 
-        usort($entries, fn (array $a, array $b): int => $signal * match ($sort) {
-            'descricao' => strnatcasecmp($a['description'], $b['description']),
-            'cartao' => strnatcasecmp($a['card_name'], $b['card_name']),
-            'data' => strcmp($a['purchased_at'], $b['purchased_at']),
-            'categoria' => strnatcasecmp($this->categoryLabel($a['category']), $this->categoryLabel($b['category'])),
-            default => $a['amount_cents'] <=> $b['amount_cents'],
+        usort($entries, function (array $a, array $b) use ($sort, $signal): int {
+            if ($sort === 'categoria') {
+                return $this->compareCategories($a['category'], $b['category'], $signal);
+            }
+
+            return $signal * match ($sort) {
+                'descricao' => strnatcasecmp($a['description'], $b['description']),
+                'cartao' => strnatcasecmp($a['card_name'], $b['card_name']),
+                'data' => strcmp($a['purchased_at'], $b['purchased_at']),
+                default => $a['amount_cents'] <=> $b['amount_cents'],
+            };
         });
 
         return $entries;
     }
 
     /**
-     * Rotulo usado so para ordenar. O prefixo do balde "sem categoria" e um
-     * caractere alto de proposito: ordenar alfabeticamente colocaria "Sem
-     * categoria" no meio da lista, e o que o usuario quer ver junto e o que
-     * ainda falta classificar — no fim, num bloco so.
+     * A ausencia de categoria e decidida antes do sinal de direcao: "sem
+     * categoria" nao e um nome que pertenca ao alfabeto, e sim o que ainda
+     * falta classificar, entao fica sempre no fim da lista — em asc e em
+     * desc — em vez de trocar de lado junto com as categorias reais quando o
+     * usuario inverte a ordenacao. O sinal so entra na comparacao entre dois
+     * rotulos de categoria de verdade.
      */
-    private function categoryLabel(?string $category): string
+    private function compareCategories(?string $a, ?string $b, int $signal): int
     {
-        return $category === null
-            ? '~~~'
-            : ExpenseCategory::from($category)->label();
+        if ($a === null || $b === null) {
+            return ($a === null ? 1 : 0) <=> ($b === null ? 1 : 0);
+        }
+
+        return $signal * strnatcasecmp(
+            ExpenseCategory::from($a)->label(),
+            ExpenseCategory::from($b)->label(),
+        );
     }
 
     /**

@@ -442,7 +442,7 @@ it('ordena as entries de gastos pela coluna pedida', function (string $ordem, st
     ['valor', 'asc', 'Zebra'],
 ]);
 
-it('joga o gasto sem categoria para o fim ao ordenar por categoria', function (): void {
+it('joga o gasto sem categoria para o fim ao ordenar por categoria, nas duas direcoes', function (string $direcao, string $primeiro, string $segundo): void {
     $user = User::factory()->create();
     $card = Card::factory()->for($user)->create();
 
@@ -452,7 +452,12 @@ it('joga o gasto sem categoria para o fim ao ordenar por categoria', function ()
         'billed_at' => '2026-07-10',
     ]);
     CashPurchase::factory()->for($card)->create([
-        'description' => 'Com rótulo',
+        'description' => 'Zebra Casa',
+        'category' => ExpenseCategory::Casa,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->for($card)->create([
+        'description' => 'Alfa Mercado',
         'category' => ExpenseCategory::Mercado,
         'billed_at' => '2026-07-10',
     ]);
@@ -461,8 +466,16 @@ it('joga o gasto sem categoria para o fim ao ordenar por categoria', function ()
         $user,
         CarbonImmutable::parse('2026-07-01'),
         sort: 'categoria',
-        direction: 'asc',
+        direction: $direcao,
     );
 
-    expect($breakdown['entries'][1]['description'])->toBe('Sem rótulo');
-});
+    // O sinal de direcao troca a ordem entre as duas categorias reais (Casa
+    // e Mercado), mas nunca tira o gasto sem categoria do fim: e o caso que
+    // o achado da revisao pegou, porque so 'asc' era coberto antes.
+    expect($breakdown['entries'][0]['description'])->toBe($primeiro)
+        ->and($breakdown['entries'][1]['description'])->toBe($segundo)
+        ->and($breakdown['entries'][2]['description'])->toBe('Sem rótulo');
+})->with([
+    'asc: Casa antes de Mercado, sem categoria no fim' => ['asc', 'Zebra Casa', 'Alfa Mercado'],
+    'desc: Mercado antes de Casa, sem categoria continua no fim' => ['desc', 'Alfa Mercado', 'Zebra Casa'],
+]);
