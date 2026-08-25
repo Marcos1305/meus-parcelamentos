@@ -458,14 +458,37 @@ export default function History({
                                     }
                                     size="sm"
                                     disabled={link.url === null}
-                                    onClick={() =>
-                                        link.url &&
+                                    onClick={() => {
+                                        if (!link.url) {
+                                            return;
+                                        }
+
+                                        // `link.url` vem do `withQueryString()`
+                                        // do paginador, que carrega o `q` já
+                                        // aplicado no servidor -- não o termo
+                                        // ainda em debounce. Com busca
+                                        // pendente, navegar para o número de
+                                        // página clicado não faz sentido: esse
+                                        // número foi calculado sobre o
+                                        // resultado antigo, que está prestes a
+                                        // deixar de existir. Toda busca nova
+                                        // começa na página 1.
+                                        if (trimmedTerm !== filters.q) {
+                                            router.get(
+                                                index().url,
+                                                { ...filters, q: trimmedTerm },
+                                                { preserveState: true },
+                                            );
+
+                                            return;
+                                        }
+
                                         router.get(
                                             link.url,
                                             {},
                                             { preserveState: true },
-                                        )
-                                    }
+                                        );
+                                    }}
                                     dangerouslySetInnerHTML={{
                                         __html: link.label,
                                     }}

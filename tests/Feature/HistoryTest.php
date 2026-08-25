@@ -293,6 +293,31 @@ it('nao dobra caixa em letra acentuada, mas dobra na parte ascii do termo', func
     'parte ascii do termo dobra normalmente' => ['DA ESQUINA', 1],
 ]);
 
+it('busca sem page explicito cai na pagina 1 mesmo com poucos resultados', function (): void {
+    // O botao de paginacao, quando ha busca ainda nao aplicada no servidor,
+    // manda o termo novo sem `page` -- nunca o numero da pagina em que o
+    // usuario estava. Pedir `page=2` com um `q` que casa poucos resultados
+    // devolveria uma lista vazia (pagina 2 nao existe para esse total), o
+    // que travaria a tela; sem `page`, a requisicao sempre cai na pagina 1,
+    // que tem os resultados.
+    $user = historyUser();
+    $card = Card::factory()->for($user)->create();
+
+    for ($i = 1; $i <= 25; $i++) {
+        purchaseInstallment($user, '2026-07-10', 100_00, ['description' => "Item $i"], $card);
+    }
+
+    purchaseInstallment($user, '2026-07-10', 100_00, ['description' => 'RaroUnico'], $card);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['month' => 'all', 'q' => 'RaroUnico']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('installments.data', 1)
+            ->where('installments.current_page', 1)
+            ->where('installments.data.0.purchase.description', 'RaroUnico'));
+});
+
 it('devolve lista vazia quando a busca nao casa nada', function (): void {
     $user = historyUser();
     installmentFor($user, '2026-07-10', 100_00);
