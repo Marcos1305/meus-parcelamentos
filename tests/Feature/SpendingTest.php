@@ -297,3 +297,35 @@ it('limpa a categoria e desmarca como manual quando category e null', function (
     expect($cash->fresh()->category)->toBeNull()
         ->and($cash->fresh()->category_is_manual)->toBeFalse();
 });
+
+it('filtra a lista de gastos pela busca da url', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Posto Ipiranga',
+        'billed_at' => '2026-07-12',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'busca' => 'padaria']))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('breakdown.entries', 1)
+            ->where('breakdown.entries.0.description', 'Padaria do Zé')
+            ->where('breakdown.search', 'padaria'));
+});
+
+it('trata busca ausente ou hostil como busca vazia', function (mixed $busca): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create(['billed_at' => '2026-07-10']);
+
+    $this->actingAs($user)
+        ->get(route('spending.index', ['mes' => '2026-07', 'busca' => $busca]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->has('breakdown.entries', 1)
+            ->where('breakdown.search', ''));
+})->with([['   '], [''], [['a', 'b']]]);

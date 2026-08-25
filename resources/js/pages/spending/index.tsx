@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import { CategoryBreakdownChart } from '@/components/category-breakdown-chart';
 import { CategoryFilterChips } from '@/components/category-filter-chips';
 import { CategoryTrendChart } from '@/components/category-trend-chart';
@@ -12,6 +13,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -49,18 +51,28 @@ function categoryRoute(entry: SpendingEntry): string {
 }
 
 /**
- * Mes e filtro de categoria vivem juntos na url e cada um sobrevive a troca
- * do outro: navegar de mes preserva `categorias`, e marcar/desmarcar um chip
- * preserva `mes`. Omitir `categorias` quando a lista fica vazia (em vez de
- * mandar uma string vazia) mantem a url limpa no caso comum de "sem filtro".
+ * Mes, filtro de categoria e busca vivem juntos na url e cada um sobrevive a
+ * troca dos outros: navegar de mes preserva `categorias` e `busca`, e
+ * marcar/desmarcar um chip preserva `mes` e `busca`. Omitir `categorias` e
+ * `busca` quando vazios (em vez de mandar uma string vazia) mantem a url
+ * limpa no caso comum de "sem filtro".
  */
 function spendingQuery(
     targetMonth: string,
     activeCategories: string[],
+    search: string,
 ): Record<string, string> {
-    return activeCategories.length > 0
-        ? { mes: targetMonth, categorias: activeCategories.join(',') }
-        : { mes: targetMonth };
+    const query: Record<string, string> = { mes: targetMonth };
+
+    if (activeCategories.length > 0) {
+        query.categorias = activeCategories.join(',');
+    }
+
+    if (search !== '') {
+        query.busca = search;
+    }
+
+    return query;
 }
 
 export default function Spending({ breakdown, categories }: SpendingProps) {
@@ -72,6 +84,7 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
         uncategorized_color: uncategorizedColor,
         active_categories: activeCategories,
         available_categories: availableCategories,
+        search,
     } = breakdown;
 
     const isFiltered = activeCategories.length > 0;
@@ -90,9 +103,34 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
     const includeUncategorizedInTrend =
         !isFiltered || activeCategories.includes(NO_CATEGORY);
 
+    const [term, setTerm] = useState(search);
+
+    // Debounce de 300ms, mesma razao do Historico: sem ele cada tecla vira
+    // uma requisicao e a lista pisca. O servidor devolve `search` ja passado
+    // por trim(), entao comparar contra o valor bruto de `term` nunca
+    // empataria quando o usuario digita um espaco a direita, disparando
+    // requisicoes sem fim.
+    useEffect(() => {
+        if (term.trim() === search) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            router.get(
+                spending.index({
+                    query: spendingQuery(month, activeCategories, term),
+                }).url,
+                {},
+                { preserveState: true, replace: true },
+            );
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [term, search, month, activeCategories]);
+
     function goToMonth(target: string) {
         return spending.index({
-            query: spendingQuery(target, activeCategories),
+            query: spendingQuery(target, activeCategories, search),
         });
     }
 
@@ -101,7 +139,8 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
             ? activeCategories.filter((value) => value !== category)
             : [...activeCategories, category];
 
-        return spending.index({ query: spendingQuery(month, next) }).url;
+        return spending.index({ query: spendingQuery(month, next, search) })
+            .url;
     }
 
     function changeCategory(entry: SpendingEntry, value: string) {
@@ -157,17 +196,29 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                     hrefFor={toggleCategoryFilter}
                 />
 
+                <Input
+                    value={term}
+                    onChange={(event) => setTerm(event.target.value)}
+                    placeholder="Buscar por descrição"
+                    aria-label="Buscar gastos"
+                    className="w-[320px]"
+                />
+
                 {entries.length === 0 && (
                     <EmptyState
                         title={
-                            isFiltered
-                                ? 'Nenhum gasto nas categorias selecionadas'
-                                : 'Nenhum gasto neste mês'
+                            search !== ''
+                                ? 'Nenhum gasto casa com a busca'
+                                : isFiltered
+                                  ? 'Nenhum gasto nas categorias selecionadas'
+                                  : 'Nenhum gasto neste mês'
                         }
                         description={
-                            isFiltered
-                                ? 'Ajuste os filtros acima ou troque de mês para ver outros gastos.'
-                                : 'A análise por categoria começa depois da primeira importação de fatura.'
+                            search !== ''
+                                ? 'Os gráficos continuam mostrando o mês inteiro. Limpe a busca para ver a lista completa.'
+                                : isFiltered
+                                  ? 'Ajuste os filtros acima ou troque de mês para ver outros gastos.'
+                                  : 'A análise por categoria começa depois da primeira importação de fatura.'
                         }
                     />
                 )}

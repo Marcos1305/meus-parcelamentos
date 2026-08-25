@@ -67,7 +67,14 @@ class BuildSpendingBreakdown
      * mes: ela e adicionada de volta com total zero para o usuario conseguir
      * desmarca-la.
      *
+     * A busca livre e a excecao deliberada a tudo isso: ela entra so em
+     * entries(). O filtro de categoria e uma particao do gasto — as fatias
+     * somam o subconjunto e a reconciliacao segue verdadeira. A busca e uma
+     * lente sobre a lista: um grafico que muda a cada tecla digitada nao
+     * comunica nada, e o "total do mes" deixaria de ser o total do mes.
+     *
      * @param  array<int, string>  $categoryFilter  chaves ja validadas pelo controller (ExpenseCategory::values() + self::UNCATEGORIZED_CATEGORY); vazio significa "todas"
+     * @param  string  $search  termo livre casado contra a descricao; vazio significa "sem busca"
      * @return array{
      *   month: string,
      *   categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
@@ -78,9 +85,10 @@ class BuildSpendingBreakdown
      *   uncategorized_color: string,
      *   active_categories: array<int, string>,
      *   available_categories: array<int, array{category: string, label: string, color: string, total_cents: int}>,
+     *   search: string,
      * }
      */
-    public function handle(User $user, CarbonImmutable $month, int $months = 12, array $categoryFilter = []): array
+    public function handle(User $user, CarbonImmutable $month, int $months = 12, array $categoryFilter = [], string $search = ''): array
     {
         $start = $month->startOfMonth();
         $seriesStart = $start->subMonths($months - 1);
@@ -107,12 +115,13 @@ class BuildSpendingBreakdown
             'month' => $start->format('Y-m'),
             'categories' => $this->categories($cash, $installments, $start),
             'months' => $this->series($cash, $installments, $seriesStart, $months),
-            'entries' => $this->entries($cash, $installments, $start),
+            'entries' => $this->entries($cash, $installments, $start, $search),
             'uncategorized_count' => $this->uncategorizedCount($cash, $installments, $start),
             'uncategorized_total_cents' => $this->uncategorizedTotalCents($cash, $installments, $start),
             'uncategorized_color' => self::UNCATEGORIZED_COLOR,
             'active_categories' => $categoryFilter,
             'available_categories' => $this->availableCategories($cashAll, $installmentsAll, $start, $categoryFilter),
+            'search' => $search,
         ];
     }
 
@@ -236,9 +245,10 @@ class BuildSpendingBreakdown
     /**
      * @param  Collection<int, CashPurchase>  $cash
      * @param  Collection<int, Installment>  $installments
+     * @param  string  $search  termo ja normalizado pelo controller; vazio significa "sem busca"
      * @return array<int, array{id: int, kind: string, description: string, amount_cents: int, purchased_at: string, installment_label: string|null, category: string|null, category_is_manual: bool, card_name: string}>
      */
-    private function entries(Collection $cash, Collection $installments, CarbonImmutable $month): array
+    private function entries(Collection $cash, Collection $installments, CarbonImmutable $month, string $search = ''): array
     {
         $entries = [];
 
@@ -278,6 +288,15 @@ class BuildSpendingBreakdown
                 'category_is_manual' => $purchase->category_is_manual,
                 'card_name' => $purchase->card->name,
             ];
+        }
+
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+
+            $entries = array_values(array_filter(
+                $entries,
+                fn (array $entry): bool => str_contains(mb_strtolower($entry['description']), $needle),
+            ));
         }
 
         usort($entries, fn (array $a, array $b): int => $b['amount_cents'] <=> $a['amount_cents']);

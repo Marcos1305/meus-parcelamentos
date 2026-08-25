@@ -23,6 +23,7 @@ class SpendingController extends Controller
                 $request->user(),
                 $this->selectedMonth($request),
                 categoryFilter: $this->categoryFilter($request),
+                search: $this->search($request),
             ),
             'categories' => array_map(
                 fn (ExpenseCategory $category): array => [
@@ -127,5 +128,18 @@ class SpendingController extends Controller
             ->filter(fn (string $candidate): bool => in_array($candidate, $requested, true))
             ->values()
             ->all();
+    }
+
+    /**
+     * Mesma regra do mes e da categoria: o termo vem da barra de enderecos,
+     * entao qualquer coisa que nao seja texto vira busca vazia em vez de
+     * derrubar a tela. O trim evita que um espaco solto conte como busca
+     * ativa e esvazie a lista sem o usuario entender por que.
+     */
+    private function search(Request $request): string
+    {
+        $term = $request->query('busca');
+
+        return is_string($term) ? trim($term) : '';
     }
 }

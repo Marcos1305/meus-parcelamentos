@@ -328,3 +328,71 @@ it('aponta a entrada da parcela para a compra, nao para a parcela', function ():
         ->and($entry['category'])->toBe('casa')
         ->and($entry['card_name'])->toBe($card->name);
 });
+
+it('a busca estreita as entries sem mexer nos graficos', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'amount_cents' => 30_00,
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Posto Ipiranga',
+        'amount_cents' => 200_00,
+        'category' => ExpenseCategory::Transporte,
+        'billed_at' => '2026-07-12',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: 'padaria',
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['description'])->toBe('Padaria do Zé')
+        ->and($breakdown['categories'])->toHaveCount(2)
+        ->and(array_sum(array_column($breakdown['categories'], 'total_cents')))->toBe(230_00)
+        ->and($breakdown['search'])->toBe('padaria');
+});
+
+it('a busca convive com o filtro de categoria', function (): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'category' => ExpenseCategory::Mercado,
+        'billed_at' => '2026-07-10',
+    ]);
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria da esquina',
+        'category' => ExpenseCategory::Transporte,
+        'billed_at' => '2026-07-11',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        categoryFilter: ['mercado'],
+        search: 'padaria',
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1)
+        ->and($breakdown['entries'][0]['description'])->toBe('Padaria do Zé');
+});
+
+it('a busca ignora maiusculas e casa parte da descricao', function (string $termo): void {
+    $user = User::factory()->create();
+    CashPurchase::factory()->forUser($user)->create([
+        'description' => 'Padaria do Zé',
+        'billed_at' => '2026-07-10',
+    ]);
+
+    $breakdown = new BuildSpendingBreakdown()->handle(
+        $user,
+        CarbonImmutable::parse('2026-07-01'),
+        search: $termo,
+    );
+
+    expect($breakdown['entries'])->toHaveCount(1);
+})->with(['PADARIA', 'padaria', 'daria do']);
