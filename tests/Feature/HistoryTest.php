@@ -204,3 +204,22 @@ it('devolve lista vazia quando a busca nao casa nada', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page->has('installments.data', 0));
 });
+
+it('degrada entrada hostil de q na url para busca vazia', function (mixed $q): void {
+    // Parametro de URL invalido cai no default em silencio; cada forma
+    // hostil de entrada precisa de uma prova, nao so leitura de codigo.
+    $user = historyUser();
+    installmentFor($user, '2026-07-10', 100_00);
+    installmentFor($user, '2026-07-11', 100_00);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['q' => $q]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('installments.data', 2)
+            ->where('filters.q', ''));
+})->with([
+    'sintaxe de array na url degrada para busca vazia' => [['a', 'b']],
+    'string so com espacos nao conta como busca ativa' => ['   '],
+    'string vazia' => [''],
+]);

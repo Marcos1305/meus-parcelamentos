@@ -52,8 +52,11 @@ export default function History({
 
     // Debounce de 300ms: sem ele cada tecla vira uma requisição e a lista
     // pisca. `replace` evita empilhar uma entrada de histórico por letra.
+    // O servidor devolve `filters.q` já normalizado por `trim()`, então
+    // comparar contra o valor bruto de `term` nunca empataria quando o
+    // usuário digita um espaço à direita, disparando requisições sem fim.
     useEffect(() => {
-        if (term === filters.q) {
+        if (term.trim() === filters.q) {
             return;
         }
 
