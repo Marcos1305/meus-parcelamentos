@@ -97,6 +97,17 @@ class BuildHistoryQuery
      * `with` do carregamento contam com uma query sem joins que dupliquem
      * linhas.
      *
+     * As duas colunas de texto (`description`, nome do cartao) ordenam pelo
+     * valor em minusculas: o SQLite compara texto por bytes, entao sem isso
+     * uma lista com "Zebra, banana, iPhone 15" sai com "banana" e
+     * "iPhone 15" depois de "Zebra" -- o byte da minuscula ASCII e maior que
+     * o da maiuscula. `lower()` e aplicado dentro da propria subconsulta
+     * (`selectRaw`) e nao como um `collate nocase` colado na clausula
+     * externa: o texto passado a `selectRaw` e sempre o mesmo literal,
+     * entao nao depende de concatenar SQL dinamico para funcionar. Acento
+     * continua fora de escopo -- `lower()` so resolve caixa em ASCII, nao
+     * acentuacao.
+     *
      * O desempate por `id` fecha toda ordenacao. Sem ele, duas parcelas com o
      * mesmo vencimento podem trocar de posicao entre requisicoes e sumir da
      * paginacao — a linha aparece na pagina 1 numa carga e na pagina 2 na
@@ -111,7 +122,7 @@ class BuildHistoryQuery
 
         match ($filters['sort']) {
             'description' => $query->orderBy(
-                Purchase::select('description')->whereColumn('purchases.id', 'installments.purchase_id'),
+                Purchase::selectRaw('lower(description)')->whereColumn('purchases.id', 'installments.purchase_id'),
                 $direction,
             ),
             'total' => $query->orderBy(
@@ -119,7 +130,7 @@ class BuildHistoryQuery
                 $direction,
             ),
             'card' => $query->orderBy(
-                Card::select('cards.name')
+                Card::selectRaw('lower(cards.name)')
                     ->join('purchases', 'purchases.card_id', '=', 'cards.id')
                     ->whereColumn('purchases.id', 'installments.purchase_id'),
                 $direction,

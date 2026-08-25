@@ -32,9 +32,12 @@ import type {
 } from '@/types';
 
 /**
- * Direção com que cada coluna abre no primeiro clique. Valor e vencimento
- * abrem decrescentes porque "o mais caro" e "o mais recente" são o que se
- * procura primeiro; texto abre crescente porque A→Z é o que se espera.
+ * Direção com que cada coluna abre no primeiro clique. Valor abre
+ * decrescente porque "o mais caro" é o que se procura primeiro. As demais
+ * abrem crescente: descrição e cartão porque A→Z é o que se espera de
+ * texto, parcela pela mesma lógica numérica, e vencimento porque `asc` já
+ * é o default de hoje da tela — mudar isso mudaria o comportamento de
+ * abertura, não só de que coluna abre por padrão.
  */
 const HISTORY_SORT_DEFAULTS: Record<string, SortDirection> = {
     description: 'asc',

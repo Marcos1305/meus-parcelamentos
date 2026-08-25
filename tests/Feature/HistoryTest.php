@@ -96,6 +96,57 @@ it('pagina em vinte e preserva os filtros', function (): void {
             ->where('installments.total', 25));
 });
 
+it('nao repete nem perde parcelas entre paginas quando o vencimento empata', function (): void {
+    // O desempate por `id` e o que garante paginas disjuntas: sem ele, duas
+    // parcelas com o mesmo valor na coluna ordenada podem trocar de posicao
+    // entre requisicoes e uma linha some sem nunca ser vista.
+    $user = historyUser();
+    $card = Card::factory()->for($user)->create();
+
+    for ($i = 1; $i <= 25; $i++) {
+        installmentFor($user, '2026-07-10', 100_00, $card);
+    }
+
+    $page1Ids = $this->actingAs($user)
+        ->get(route('history.index', ['card' => $card->id, 'page' => 1]))
+        ->viewData('page')['props']['installments']['data'];
+
+    $page2Ids = $this->actingAs($user)
+        ->get(route('history.index', ['card' => $card->id, 'page' => 2]))
+        ->viewData('page')['props']['installments']['data'];
+
+    $allIds = collect($page1Ids)->pluck('id')->merge(collect($page2Ids)->pluck('id'));
+
+    expect($allIds)->toHaveCount(25);
+    expect($allIds->unique())->toHaveCount(25);
+});
+
+it('nao repete nem perde parcelas entre paginas quando a subconsulta empata', function (): void {
+    // Mesmo invariante do teste acima, mas para uma coluna ordenada por
+    // subconsulta correlacionada: a subconsulta devolve o mesmo valor para
+    // as 25 parcelas (mesma descricao), entao e o cenario onde o empate e
+    // mais provavel de acontecer.
+    $user = historyUser();
+    $card = Card::factory()->for($user)->create();
+
+    for ($i = 1; $i <= 25; $i++) {
+        purchaseInstallment($user, '2026-07-10', 100_00, ['description' => 'Empate'], $card);
+    }
+
+    $page1Ids = $this->actingAs($user)
+        ->get(route('history.index', ['card' => $card->id, 'sort' => 'description', 'page' => 1]))
+        ->viewData('page')['props']['installments']['data'];
+
+    $page2Ids = $this->actingAs($user)
+        ->get(route('history.index', ['card' => $card->id, 'sort' => 'description', 'page' => 2]))
+        ->viewData('page')['props']['installments']['data'];
+
+    $allIds = collect($page1Ids)->pluck('id')->merge(collect($page2Ids)->pluck('id'));
+
+    expect($allIds)->toHaveCount(25);
+    expect($allIds->unique())->toHaveCount(25);
+});
+
 it('entrega a observacao da compra na linha do historico', function (): void {
     $user = historyUser();
     $installment = installmentFor($user, '2026-07-10', 100_00);
@@ -232,6 +283,22 @@ it('ordena por descricao', function (): void {
         ->assertInertia(fn ($page) => $page->where('installments.data.0.purchase.description', 'Zebra'));
 });
 
+it('ordena por descricao ignorando caixa', function (): void {
+    // SQLite compara texto por bytes: sem tratamento, minusculas (banana)
+    // ficam depois de qualquer maiuscula (Zebra) numa ordenacao asc.
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, ['description' => 'Zebra']);
+    purchaseInstallment($user, '2026-07-11', 100_00, ['description' => 'banana']);
+    purchaseInstallment($user, '2026-07-12', 100_00, ['description' => 'Abacate']);
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'description', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page
+            ->where('installments.data.0.purchase.description', 'Abacate')
+            ->where('installments.data.1.purchase.description', 'banana')
+            ->where('installments.data.2.purchase.description', 'Zebra'));
+});
+
 it('ordena por valor total da compra', function (): void {
     $user = historyUser();
     purchaseInstallment($user, '2026-07-10', 100_00, ['total_amount_cents' => 50_00]);
@@ -258,6 +325,20 @@ it('ordena por nome do cartao', function (): void {
     $this->actingAs($user)
         ->get(route('history.index', ['sort' => 'card', 'dir' => 'desc']))
         ->assertInertia(fn ($page) => $page->where('installments.data.0.card.name', 'Zeta'));
+});
+
+it('ordena por nome do cartao ignorando caixa', function (): void {
+    $user = historyUser();
+    purchaseInstallment($user, '2026-07-10', 100_00, [], Card::factory()->for($user)->create(['name' => 'Zeta']));
+    purchaseInstallment($user, '2026-07-11', 100_00, [], Card::factory()->for($user)->create(['name' => 'alfa']));
+    purchaseInstallment($user, '2026-07-12', 100_00, [], Card::factory()->for($user)->create(['name' => 'Beta']));
+
+    $this->actingAs($user)
+        ->get(route('history.index', ['sort' => 'card', 'dir' => 'asc']))
+        ->assertInertia(fn ($page) => $page
+            ->where('installments.data.0.card.name', 'alfa')
+            ->where('installments.data.1.card.name', 'Beta')
+            ->where('installments.data.2.card.name', 'Zeta'));
 });
 
 it('ordena pelo numero da parcela', function (): void {
