@@ -6,6 +6,7 @@ import { CategoryTrendChart } from '@/components/category-trend-chart';
 import { EmptyState } from '@/components/empty-state';
 import { SortableHeader } from '@/components/sortable-header';
 import type { SortDirection } from '@/components/sortable-header';
+import { SpendingExportDialog } from '@/components/spending-export-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -265,28 +266,32 @@ export default function Spending({ breakdown, categories }: SpendingProps) {
                         Gastos
                     </h1>
 
-                    <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon" asChild>
-                            <Link
-                                href={goToMonth(shiftMonth(month, -1))}
-                                prefetch
-                                aria-label="Mês anterior"
-                            >
-                                ‹
-                            </Link>
-                        </Button>
-                        <span className="min-w-36 text-center text-sm font-medium capitalize">
-                            {formatMonthLabel(month)}
-                        </span>
-                        <Button variant="outline" size="icon" asChild>
-                            <Link
-                                href={goToMonth(shiftMonth(month, 1))}
-                                prefetch
-                                aria-label="Próximo mês"
-                            >
-                                ›
-                            </Link>
-                        </Button>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <SpendingExportDialog month={month} />
+
+                        <div className="flex items-center gap-1">
+                            <Button variant="outline" size="icon" asChild>
+                                <Link
+                                    href={goToMonth(shiftMonth(month, -1))}
+                                    prefetch
+                                    aria-label="Mês anterior"
+                                >
+                                    ‹
+                                </Link>
+                            </Button>
+                            <span className="min-w-36 text-center text-sm font-medium capitalize">
+                                {formatMonthLabel(month)}
+                            </span>
+                            <Button variant="outline" size="icon" asChild>
+                                <Link
+                                    href={goToMonth(shiftMonth(month, 1))}
+                                    prefetch
+                                    aria-label="Próximo mês"
+                                >
+                                    ›
+                                </Link>
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
