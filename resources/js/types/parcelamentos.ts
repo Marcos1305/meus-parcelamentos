@@ -138,6 +138,23 @@ export type DashboardSummary = {
     paid_this_month_cents: number;
 };
 
+export type IncomeCommitmentRow = {
+    month: string;
+    card_cents: number;
+    fixed_expense_cents: number;
+    income_cents: number | null;
+};
+
+export type PayoffPoint = {
+    month: string;
+    remaining_cents: number;
+};
+
+export type CardProjection = {
+    series: { key: string; label: string }[];
+    months: { month: string; totals: Record<string, number> }[];
+};
+
 export type DashboardCardOption = Pick<
     CardOption,
     'id' | 'name' | 'last_four_digits'

@@ -7,8 +7,11 @@ import {
     Wallet,
 } from 'lucide-react';
 import InvoiceImportController from '@/actions/App/Http/Controllers/InvoiceImportController';
+import { CardProjectionChart } from '@/components/card-projection-chart';
+import { CategoryBreakdownChart } from '@/components/category-breakdown-chart';
 import { EmptyState } from '@/components/empty-state';
-import { ProjectionChart } from '@/components/projection-chart';
+import { IncomeCommitmentChart } from '@/components/income-commitment-chart';
+import { PayoffChart } from '@/components/payoff-chart';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,15 +20,24 @@ import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import cards from '@/routes/cards';
 import history from '@/routes/history';
+import spending from '@/routes/spending';
 import type {
+    CardProjection,
     DashboardCardOption,
     DashboardSummary,
+    IncomeCommitmentRow,
     MonthlyProjectionRow,
+    PayoffPoint,
+    SpendingCategoryTotal,
 } from '@/types';
 
 type DashboardProps = {
     summary: DashboardSummary;
     projection: MonthlyProjectionRow[];
+    commitment: IncomeCommitmentRow[];
+    payoff: PayoffPoint[];
+    card_projection: CardProjection | null;
+    categories: SpendingCategoryTotal[] | null;
     cards: DashboardCardOption[];
     selected_card_id: number | null;
     invoiceImportAvailable: boolean;
@@ -38,6 +50,10 @@ function cardChipLabel(card: DashboardCardOption): string {
 export default function Dashboard({
     summary,
     projection,
+    commitment,
+    payoff,
+    card_projection: cardProjection,
+    categories,
     cards: cardOptions,
     selected_card_id: selectedCardId,
     invoiceImportAvailable,
@@ -72,7 +88,15 @@ export default function Dashboard({
     const limitCents = summary.credit_limit_cents;
     const usedRatio = limitCents > 0 ? usedCents / limitCents : 0;
 
-    const hasFutureInstallments = projection.some((row) => row.total_cents > 0);
+    const hasCommitment = commitment.some(
+        (row) =>
+            row.card_cents > 0 ||
+            row.fixed_expense_cents > 0 ||
+            row.income_cents !== null,
+    );
+    const showCardProjection =
+        cardProjection !== null && cardProjection.series.length > 1;
+    const showCategories = categories !== null && categories.length > 0;
 
     return (
         <>
@@ -223,17 +247,19 @@ export default function Dashboard({
                             </Card>
                         </div>
 
-                        {hasFutureInstallments && (
+                        {hasCommitment && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>
                                         {selectedCard
-                                            ? `Projeção: ${cardChipLabel(selectedCard)}`
-                                            : 'Projeção 6 meses'}
+                                            ? `Comprometimento da entrada: ${cardChipLabel(selectedCard)}`
+                                            : 'Comprometimento da entrada'}
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent>
-                                    <ProjectionChart months={projection} />
+                                    <IncomeCommitmentChart
+                                        months={commitment}
+                                    />
                                 </CardContent>
                             </Card>
                         )}
@@ -298,6 +324,60 @@ export default function Dashboard({
                         </CardContent>
                     </Card>
                 </div>
+
+                {(payoff.length > 0 ||
+                    showCardProjection ||
+                    showCategories) && (
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        {payoff.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Curva de quitação</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <PayoffChart points={payoff} />
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {showCardProjection && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Parcelas por cartão</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <CardProjectionChart
+                                        projection={cardProjection}
+                                    />
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {showCategories && (
+                            <Card className="flex flex-col">
+                                <CardHeader>
+                                    <CardTitle>Gastos do mês</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex flex-1 flex-col">
+                                    <div className="flex-1">
+                                        <CategoryBreakdownChart
+                                            categories={categories}
+                                        />
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        className="mt-4"
+                                        asChild
+                                    >
+                                        <Link href={spending.index()}>
+                                            Ver gastos
+                                        </Link>
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </div>
+                )}
 
                 {invoiceImportAvailable && (
                     <Card className="border-transparent bg-sidebar text-sidebar-foreground">
