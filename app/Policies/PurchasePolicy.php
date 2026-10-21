@@ -16,4 +16,9 @@ class PurchasePolicy
     {
         return $purchase->card->user_id === $user->id;
     }
+
+    public function update(User $user, Purchase $purchase): bool
+    {
+        return $purchase->card->user_id === $user->id;
+    }
 }

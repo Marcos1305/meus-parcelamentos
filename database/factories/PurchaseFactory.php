@@ -23,6 +23,7 @@ class PurchaseFactory extends Factory
             'card_id' => Card::factory(),
             'description' => fake()->randomElement(['MacBook Pro M2', 'iPhone 15 Pro Max', 'Tênis Nike Air Max', 'Cadeira Herman Miller']),
             'merchant' => fake()->company(),
+            'notes' => null,
             'total_amount_cents' => fake()->numberBetween(10_000, 1_500_000),
             'installments_count' => fake()->numberBetween(1, 12),
             'purchased_at' => fake()->dateTimeBetween('-18 months', 'now'),

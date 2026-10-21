@@ -102,3 +102,44 @@ it('descarta uma linha com valor negativo', function (): void {
 
     expect($lines)->toHaveCount(0);
 });
+
+it('extrai as compras a vista', function (): void {
+    $cashLines = (new RennerInvoiceParser)->parse(rennerFixture())->cashLines;
+
+    expect($cashLines)->toHaveCount(21);
+
+    foreach ($cashLines as $line) {
+        expect($line->amountCents)->toBeGreaterThan(0)
+            ->and($line->description)->not->toContain('Compra a Vista');
+    }
+});
+
+it('ignora pagamento de fatura', function (): void {
+    $descriptions = array_map(
+        fn ($line): string => mb_strtolower($line->description),
+        (new RennerInvoiceParser)->parse(rennerFixture())->cashLines,
+    );
+
+    foreach ($descriptions as $description) {
+        expect($description)->not->toContain('pagamento');
+    }
+});
+
+it('nao le a vista das proximas faturas', function (): void {
+    $text = rennerFixture()
+        ."\n01/09/2026    Compra a Vista                       LOJA DA PROXIMA FATURA                                    99,00\n";
+
+    expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
+});
+
+it('descarta uma compra a vista com valor negativo', function (): void {
+    $negative = '26/03/2026    Compra a Vista                       ESTORNO DE COMPRA                                        -50,00';
+
+    $text = str_replace(
+        'Compras parceladas | Próximas faturas:',
+        $negative."\nCompras parceladas | Próximas faturas:",
+        rennerFixture(),
+    );
+
+    expect((new RennerInvoiceParser)->parse($text)->cashLines)->toHaveCount(21);
+});

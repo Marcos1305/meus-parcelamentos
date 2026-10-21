@@ -151,3 +151,29 @@ it('nao transforma a linha de continuacao em transacao', function (): void {
         ->and($lines[0]->description)->toBe('DOMO SEVEROBOG')
         ->and($lines[0]->amountCents)->toBe(12_901);
 });
+
+it('extrai as compras a vista', function (): void {
+    $cashLines = (new ItauInvoiceParser)->parse(itauFixture())->cashLines;
+
+    expect($cashLines)->toHaveCount(26);
+
+    foreach ($cashLines as $line) {
+        expect($line->amountCents)->toBeGreaterThan(0)
+            ->and($line->description)->not->toMatch('/ \d{1,2}\/\d{1,2}$/u');
+    }
+});
+
+it('ignora a coluna de pagamentos', function (): void {
+    $descriptions = array_map(
+        fn ($line): string => mb_strtolower($line->description),
+        (new ItauInvoiceParser)->parse(itauFixture())->cashLines,
+    );
+
+    foreach ($descriptions as $description) {
+        expect($description)->not->toContain('pagamento');
+    }
+});
+
+it('continua lendo as mesmas parceladas depois de ler as a vista', function (): void {
+    expect((new ItauInvoiceParser)->parse(itauFixture())->lines)->toHaveCount(19);
+});

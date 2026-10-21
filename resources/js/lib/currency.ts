@@ -3,6 +3,13 @@ const BRL = new Intl.NumberFormat('pt-BR', {
     currency: 'BRL',
 });
 
+const BRL_COMPACT = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+});
+
 const MONTH = new Intl.DateTimeFormat('pt-BR', {
     month: 'long',
     year: 'numeric',
@@ -18,6 +25,14 @@ const DATE = new Intl.DateTimeFormat('pt-BR', {
 
 export function formatBRL(cents: number): string {
     return BRL.format(cents / 100);
+}
+
+/**
+ * Valor compactado para rótulos de eixo, onde "R$ 1,2 mil" cabe e
+ * "R$ 1.234,56" não. Nunca use isto onde o valor exato importa.
+ */
+export function formatBRLCompact(cents: number): string {
+    return BRL_COMPACT.format(cents / 100);
 }
 
 export function parseBRLToCents(input: string): number {

@@ -13,9 +13,7 @@ class ExportHistoryController extends Controller
     public function __invoke(Request $request, BuildHistoryQuery $buildHistoryQuery): StreamedResponse
     {
         $query = $buildHistoryQuery
-            ->handle($request->user(), $buildHistoryQuery->filters($request))
-            ->orderBy('due_date')
-            ->orderBy('id');
+            ->handle($request->user(), $buildHistoryQuery->filters($request));
 
         return response()->streamDownload(function () use ($query): void {
             $handle = fopen('php://output', 'wb');
@@ -28,7 +26,7 @@ class ExportHistoryController extends Controller
             fwrite($handle, "\xEF\xBB\xBF");
 
             fputcsv($handle, [
-                'cartao', 'descricao', 'estabelecimento', 'valor_total_compra',
+                'cartao', 'descricao', 'estabelecimento', 'observacao', 'valor_total_compra',
                 'parcela', 'total_parcelas', 'valor_parcela', 'vencimento', 'status',
             ], ';', '"', '');
 
@@ -54,6 +52,7 @@ class ExportHistoryController extends Controller
             "{$card->name} •••• {$card->last_four_digits}",
             $purchase->description,
             $purchase->merchant ?? '',
+            $purchase->notes ?? '',
             $this->money($purchase->total_amount_cents),
             (string) $installment->number,
             (string) $purchase->installments_count,

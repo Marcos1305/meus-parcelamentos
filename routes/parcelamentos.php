@@ -17,6 +17,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('lancamentos/novo', [PurchaseController::class, 'create'])->name('purchases.create');
     Route::post('lancamentos', [PurchaseController::class, 'store'])->name('purchases.store');
+    Route::patch('lancamentos/{purchase}/observacao', [PurchaseController::class, 'updateNotes'])
+        ->name('purchases.notes')
+        ->can('update', 'purchase');
     Route::delete('lancamentos/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy')->can('delete', 'purchase');
 
     Route::get('importar', [InvoiceImportController::class, 'create'])->name('invoice-imports.create');

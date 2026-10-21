@@ -3,6 +3,7 @@
 namespace App\Invoices\Parsers;
 
 use App\Invoices\InvoiceParser;
+use App\Invoices\ParsedCashLine;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\ParsedInvoiceLine;
 use App\Invoices\UnreadableInvoiceException;
@@ -27,6 +28,19 @@ class MercadoPagoInvoiceParser implements InvoiceParser
      */
     private const INSTALLMENT_LINE_PATTERN = '/^\s*(\d{2})\/(\d{2})\s+(.+?)\s+Parcela\s+(\d+)\s+de\s+(\d+)\s+(-)?R\$\s*([\d.,]+)\s*$/u';
 
+    /**
+     * A linha a vista e a mesma da parcelada sem o trecho "Parcela N de M".
+     * O padrao parcelado e testado primeiro pelo mesmo motivo do Nubank: sem
+     * isso a descricao engoliria o trecho e a parcela viraria compra avulsa.
+     */
+    private const CASH_LINE_PATTERN = '/^\s*(\d{2})\/(\d{2})\s+(.+?)\s+(-)?R\$\s*([\d.,]+)\s*$/u';
+
+    /**
+     * O pagamento da fatura anterior aparece com valor positivo, sem sinal que
+     * o distinja de uma compra. So o texto o identifica.
+     */
+    private const PAYMENT_PREFIX = 'pagamento';
+
     public function supports(string $text): bool
     {
         return str_contains($text, self::SIGNATURE);
@@ -42,6 +56,7 @@ class MercadoPagoInvoiceParser implements InvoiceParser
             dueDate: $this->extractDueDate($text),
             lastFourDigits: null,
             lines: $this->extractLines($text),
+            cashLines: $this->extractCashLines($text),
         );
     }
 
@@ -86,6 +101,49 @@ class MercadoPagoInvoiceParser implements InvoiceParser
                 installmentNumber: (int) $matches[4],
                 installmentsCount: (int) $matches[5],
                 amountCents: $this->parseAmountCents($matches[7]),
+            );
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return array<int, ParsedCashLine>
+     */
+    private function extractCashLines(string $text): array
+    {
+        $lines = [];
+
+        foreach (explode("\n", $text) as $rawLine) {
+            if (preg_match(self::INSTALLMENT_LINE_PATTERN, $rawLine)) {
+                continue;
+            }
+
+            if (! preg_match(self::CASH_LINE_PATTERN, $rawLine, $matches)) {
+                continue;
+            }
+
+            if ($matches[4] !== '') {
+                continue;
+            }
+
+            $description = trim($matches[3]);
+
+            if (str_starts_with(mb_strtolower($description), self::PAYMENT_PREFIX)) {
+                continue;
+            }
+
+            $amountCents = $this->parseAmountCents($matches[5]);
+
+            if ($amountCents < 1) {
+                continue;
+            }
+
+            $lines[] = new ParsedCashLine(
+                description: $description,
+                transactionDay: (int) $matches[1],
+                transactionMonth: (int) $matches[2],
+                amountCents: $amountCents,
             );
         }
 

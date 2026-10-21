@@ -17,7 +17,10 @@ class ConfirmInvoiceImportRequest extends FormRequest
         $total = count($this->candidatesInSession());
 
         return [
-            'lines' => ['required', 'array', 'min:1'],
+            // 'present' em vez de 'required': uma fatura sem nenhuma
+            // parcelada, so com compras a vista, submete um lote vazio de
+            // proposito.
+            'lines' => ['present', 'array'],
             'lines.*.index' => ['required', 'integer', 'min:0', 'distinct', 'lt:'.max($total, 1)],
             'lines.*.purchased_at' => ['required', 'date', 'before_or_equal:today'],
         ];

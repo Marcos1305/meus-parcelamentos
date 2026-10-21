@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Agents\CategorizeExpenses;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -14,8 +15,14 @@ use Tests\TestCase;
 |
 */
 
+// Sem este fake, qualquer teste de Feature que dispare CategorizeExpensesJob
+// (direto ou via dispatch, ja que a fila de teste roda em modo sync) chamaria
+// o agente de verdade e tentaria falar com o Ollama. Testes que precisam de
+// uma resposta especifica chamam CategorizeExpenses::fake() de novo e
+// sobrescrevem este default.
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    ->beforeEach(fn () => CategorizeExpenses::fake(fn (): array => ['items' => []]))
     ->in('Feature');
 
 /*

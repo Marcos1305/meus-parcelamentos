@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Actions\CalculateFirstDueDate;
 use App\Actions\GenerateInstallments;
+use App\Actions\WriteCashPurchases;
 use App\Http\Requests\AnalyzeInvoiceRequest;
 use App\Http\Requests\ConfirmInvoiceImportRequest;
 use App\Invoices\BuildInvoiceCandidates;
 use App\Invoices\ExtractorUnavailableException;
 use App\Invoices\ExtractsInvoiceText;
 use App\Invoices\InvoiceCandidate;
+use App\Invoices\ParsedCashLine;
 use App\Invoices\ParsedInvoice;
 use App\Invoices\PurchaseAlreadyExists;
 use App\Invoices\ResolveInvoiceParser;
 use App\Invoices\UnreadableInvoiceException;
 use App\Invoices\UnsupportedInvoiceException;
+use App\Jobs\CategorizeExpensesJob;
 use App\Models\Card;
 use App\Models\Purchase;
 use Carbon\CarbonImmutable;
@@ -78,9 +81,9 @@ class InvoiceImportController extends Controller
             throw ValidationException::withMessages(['invoice' => $exception->getMessage()]);
         }
 
-        if ($invoice->lines === []) {
+        if ($invoice->lines === [] && $invoice->cashLines === []) {
             throw ValidationException::withMessages([
-                'invoice' => 'Nenhuma compra parcelada encontrada nesta fatura.',
+                'invoice' => 'Nenhuma compra encontrada nesta fatura.',
             ]);
         }
 
@@ -94,6 +97,15 @@ class InvoiceImportController extends Controller
             'candidates' => array_map(
                 fn (InvoiceCandidate $candidate): array => $candidate->toArray(),
                 $candidates,
+            ),
+            'cash_lines' => array_map(
+                fn (ParsedCashLine $line): array => [
+                    'description' => $line->description,
+                    'day' => $line->transactionDay,
+                    'month' => $line->transactionMonth,
+                    'amount_cents' => $line->amountCents,
+                ],
+                $invoice->cashLines,
             ),
         ]);
 
@@ -129,6 +141,7 @@ class InvoiceImportController extends Controller
                 'last_four_digits' => $card->last_four_digits,
             ],
             'candidates' => $import['candidates'],
+            'cash_lines_count' => count($import['cash_lines']),
         ]);
     }
 
@@ -137,6 +150,7 @@ class InvoiceImportController extends Controller
         GenerateInstallments $generateInstallments,
         PurchaseAlreadyExists $purchaseAlreadyExists,
         CalculateFirstDueDate $calculateFirstDueDate,
+        WriteCashPurchases $writeCashPurchases,
     ): RedirectResponse {
         $import = $this->importFromSession($request);
 
@@ -157,8 +171,9 @@ class InvoiceImportController extends Controller
         $lines = $request->validated('lines');
 
         $imported = 0;
+        $cashImported = 0;
 
-        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, $calculateFirstDueDate, &$imported): void {
+        DB::transaction(function () use ($lines, $import, $card, $generateInstallments, $purchaseAlreadyExists, $calculateFirstDueDate, $writeCashPurchases, &$imported, &$cashImported): void {
             $alreadyInHistory = $this->fingerprintsAlreadyInHistory(
                 $lines,
                 $import['candidates'],
@@ -168,7 +183,7 @@ class InvoiceImportController extends Controller
             );
 
             foreach ($lines as $line) {
-                $candidate = InvoiceCandidate::fromArray($import['candidates'][$line['index']]);
+                $candidate = InvoiceCandidate::fromArray($import['candidates'][$line['index']] ?? []);
 
                 if (! $candidate->status->isImportable()) {
                     continue;
@@ -194,11 +209,19 @@ class InvoiceImportController extends Controller
 
                 $imported++;
             }
+
+            $cashImported = $writeCashPurchases->handle(
+                $import['cash_lines'],
+                $card,
+                CarbonImmutable::parse($import['due_date']),
+            );
         });
 
         $request->session()->forget('invoice_import');
 
-        Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported));
+        CategorizeExpensesJob::dispatch($request->user()->id);
+
+        Inertia::flash('toast', $this->importToast($imported, count($lines) - $imported, $cashImported));
 
         return to_route('history.index');
     }
@@ -215,8 +238,14 @@ class InvoiceImportController extends Controller
      * inferido, porque e a data final que sera persistida e e dela que as
      * parcelas gravadas nascem.
      *
+     * O `?? []` no acesso a $candidates[$indice] cobre a fatura sem nenhuma
+     * parcelada: a validacao do formulario permite indice 0 mesmo com a
+     * lista vazia, para nao competir com a mensagem de sessao expirada de
+     * confirm(). Sem o fallback, esse indice inexistente vira erro fatal em
+     * vez de um candidato vazio que isImportable() descarta.
+     *
      * @param  array<int, array{index: int, purchased_at: string}>  $lines
-     * @param  non-empty-array<int, array<string, mixed>>  $candidates
+     * @param  array<int, array<string, mixed>>  $candidates
      * @return array<string, bool>
      */
     private function fingerprintsAlreadyInHistory(
@@ -229,7 +258,7 @@ class InvoiceImportController extends Controller
         $existing = [];
 
         foreach ($lines as $line) {
-            $candidate = InvoiceCandidate::fromArray($candidates[$line['index']]);
+            $candidate = InvoiceCandidate::fromArray($candidates[$line['index']] ?? []);
             $purchasedAt = CarbonImmutable::parse($line['purchased_at']);
             $firstDueDate = $this->firstDueDateFor($calculateFirstDueDate, $card, $purchasedAt);
             $fingerprint = $this->fingerprint($candidate, $firstDueDate);
@@ -277,9 +306,9 @@ class InvoiceImportController extends Controller
     }
 
     /**
-     * O usuario marcou N linhas e o botao prometeu N compras. Quando a
-     * gravacao pula alguma, a mensagem precisa dizer isso em vez de comemorar
-     * um numero que nao aconteceu.
+     * O usuario marcou N linhas parceladas e o botao prometeu N compras.
+     * Quando a gravacao pula alguma, a mensagem precisa dizer isso em vez de
+     * comemorar um numero que nao aconteceu.
      *
      * Sao dois os motivos de pulo — a compra ja existia ou o candidato nao
      * chegou em estado que possa ser gravado — e a mensagem cobre os dois numa
@@ -287,18 +316,43 @@ class InvoiceImportController extends Controller
      * contador e uma combinatoria de frases para um caso que so aparece com a
      * sessao adulterada.
      *
+     * As compras a vista tem contagem propria e sempre certa: WriteCashPurchases
+     * usa insertOrIgnore, entao nao ha estado intermediario para relatar como
+     * ha para as parceladas. Elas entram na mensagem sempre que $cashImported
+     * for maior que zero — inclusive quando nenhuma parcelada foi importada,
+     * porque "nenhuma compra foi importada" seria mentira depois de gravar
+     * compras a vista, e o usuario nao teria como saber que a fatura so-a-vista
+     * funcionou.
+     *
      * @return array{type: string, message: string}
      */
-    private function importToast(int $imported, int $skipped): array
+    private function importToast(int $imported, int $skipped, int $cashImported): array
     {
         $skippedText = $skipped === 1
             ? 'ela já constava no histórico ou não pôde ser lida'
             : 'elas já constavam no histórico ou não puderam ser lidas';
 
-        if ($imported === 0) {
+        if ($imported === 0 && $cashImported === 0) {
             return [
                 'type' => 'info',
                 'message' => "Nenhuma compra foi importada: {$skippedText}.",
+            ];
+        }
+
+        $cashText = match (true) {
+            $cashImported === 0 => null,
+            $cashImported === 1 => '1 compra à vista salva para análise de gastos.',
+            default => "{$cashImported} compras à vista salvas para análise de gastos.",
+        };
+
+        if ($imported === 0) {
+            if ($skipped === 0) {
+                return ['type' => 'success', 'message' => $cashText];
+            }
+
+            return [
+                'type' => 'info',
+                'message' => "{$cashText} Nenhuma parcelada foi importada: {$skippedText}.",
             ];
         }
 
@@ -306,8 +360,10 @@ class InvoiceImportController extends Controller
             ? '1 compra importada.'
             : "{$imported} compras importadas.";
 
+        $summary = $cashText === null ? $importedText : "{$importedText} {$cashText}";
+
         if ($skipped === 0) {
-            return ['type' => 'success', 'message' => $importedText];
+            return ['type' => 'success', 'message' => $summary];
         }
 
         $ignoredText = $skipped === 1
@@ -316,7 +372,7 @@ class InvoiceImportController extends Controller
 
         return [
             'type' => 'info',
-            'message' => "{$importedText} {$ignoredText}: {$skippedText}.",
+            'message' => "{$summary} {$ignoredText}: {$skippedText}.",
         ];
     }
 
@@ -324,17 +380,17 @@ class InvoiceImportController extends Controller
      * A sessao dura duas horas e sobrevive a deploy, entao a forma guardada
      * pode ser de uma versao anterior do app.
      *
-     * store() so grava a sessao com pelo menos uma linha parcelada, entao
-     * uma lista de candidatos vazia nao e um lote vazio: e uma sessao que
-     * nao da mais para usar. Um candidato sem o vencimento da primeira
-     * parcela e o mesmo caso: sem essa ancora a deteccao de duplicata nao
-     * funciona, e a revisao so teria a oferecer uma lista que a gravacao
-     * inteira recusaria em silencio. Reconhecer os dois aqui, no unico ponto
-     * que le a sessao, e o que impede review() e confirm() de discordarem
-     * sobre quais indices existem e o que da ao usuario a instrucao de
-     * enviar o PDF de novo em vez de um lote que nao grava nada.
+     * Uma fatura pode nao ter nenhuma parcelada e ainda assim ter dezenas de
+     * compras a vista para gravar, entao lista de candidatos vazia deixou de
+     * ser sinal de sessao imprestavel. Quem invalida a sessao e um candidato
+     * sem o vencimento da primeira parcela: sem essa ancora a deteccao de
+     * duplicata nao funciona, e a revisao so teria a oferecer uma lista que a
+     * gravacao inteira recusaria em silencio. Reconhecer isso aqui, no unico
+     * ponto que le a sessao, e o que impede review() e confirm() de
+     * discordarem sobre quais indices existem e o que da ao usuario a
+     * instrucao de enviar o PDF de novo em vez de um lote que nao grava nada.
      *
-     * @return array{card_id: int, issuer: string, due_date: string, candidates: non-empty-array<int, array<string, mixed>>}|null
+     * @return array{card_id: int, issuer: string, due_date: string, candidates: array<int, array<string, mixed>>, cash_lines: array<int, array{description: string, day: int, month: int, amount_cents: int}>}|null
      */
     private function importFromSession(Request $request): ?array
     {
@@ -350,16 +406,37 @@ class InvoiceImportController extends Controller
 
         $candidates = array_values(array_filter($import['candidates'], 'is_array'));
 
-        if ($candidates === [] || ! $this->everyCandidateIsAnchored($candidates)) {
+        if (! $this->everyCandidateIsAnchored($candidates)) {
             return null;
         }
+
+        $cashLines = is_array($import['cash_lines'] ?? null)
+            ? array_values(array_filter($import['cash_lines'], $this->isCashLine(...)))
+            : [];
 
         return [
             'card_id' => (int) $import['card_id'],
             'issuer' => $import['issuer'],
             'due_date' => $import['due_date'],
             'candidates' => $candidates,
+            'cash_lines' => $cashLines,
         ];
+    }
+
+    /**
+     * A sessao dura duas horas e sobrevive a deploy: a forma guardada pode
+     * ser de uma versao anterior do app. Uma linha a vista irreconhecivel e
+     * descartada em silencio, e nao invalida a sessao inteira — ao contrario
+     * do candidato parcelado, cuja forma estranha viraria compra errada. Aqui
+     * o pior caso e um gasto de fora do grafico.
+     */
+    private function isCashLine(mixed $line): bool
+    {
+        return is_array($line)
+            && is_string($line['description'] ?? null)
+            && is_int($line['day'] ?? null)
+            && is_int($line['month'] ?? null)
+            && is_int($line['amount_cents'] ?? null);
     }
 
     /**
